@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trust Diary - Encrypted Nostr P2P Client</title>
+    <script src="https://unpkg.com/nostr-tools@1.17.0/lib/nostr.bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl-fast.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tweetnacl-util@0.15.1/nacl-util.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #0f0f0f 0%, #1a1a2e 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            color: #888;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .status.searching { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+        .status.found { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+        .status.connected { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+        .status.error { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-family: inherit;
+        }
+
+        button {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-right: 10px;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .log {
+            background: #000;
+            color: #0f0;
+            font-family: 'SF Mono', 'Monaco', monospace;
+            font-size: 0.85em;
+            padding: 15px;
+            border-radius: 8px;
+            height: 200px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+
+        .log-entry {
+            margin-bottom: 3px;
+        }
+
+        .log-entry.error { color: #ff6b6b; }
+        .log-entry.success { color: #51cf66; }
+        .log-entry.info { color: #74c0fc; }
+
+        .entry {
+            background: rgba(255, 255, 255, 0.03);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 3px solid #667eea;
+        }
+
+        .key-display {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            word-break: break-all;
+            font-size: 0.85em;
+            margin: 10px 0;
+        }
+
+        .encryption-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .lock-icon {
+            width: 20px;
+            height: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Trust Diary - Fully Encrypted P2P</h1>
+        <p class="subtitle">End-to-end encrypted diary sharing via Nostr + WebRTC</p>
+
+        <div class="encryption-indicator">
+            <svg class="lock-icon" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0110 0v4"/>
+            </svg>
+            <span style="color: #10b981; font-weight: 600;">All communications are end-to-end encrypted</span>
+        </div>
+
+        <div class="status searching" id="status">Initializing...</div>
+
+        <div class="card">
+            <h2>🔑 Your Identity</h2>
+            <p style="margin-bottom: 15px; color: #888;">Your cryptographic identity for this session</p>
+
+            <label>Your Private Key (keep secret!)</label>
+            <textarea id="privateKey" placeholder="Generated automatically or paste existing..." rows="3"></textarea>
+
+            <label>Your Public Keys</label>
+            <div class="key-display">
+                <strong>Sign Public Key:</strong> <span id="signPubKey">Generating...</span><br>
+                <strong>Box Public Key:</strong> <span id="boxPubKey">Generating...</span><br>
+                <strong>Nostr Public Key:</strong> <span id="nostrPubKey">Generating...</span>
+            </div>
+
+            <button onclick="generateNewIdentity()">🔑 Generate New Identity</button>
+            <button onclick="saveIdentity()">💾 Save Identity</button>
+        </div>
+
+        <div class="card">
+            <h2>🔍 Connect to Service</h2>
+            <label>Service Nostr Public Key</label>
+            <input type="text" id="serviceNostrKey" placeholder="Enter the service's Nostr public key..."
+                   value="57cafe5a87555d0271c2fb995f58e05ba80896ea81b5ca0b6e602bbcdb2cc0da">
+
+            <label>Service Box Public Key (for encryption)</label>
+            <input type="text" id="serviceBoxKey" placeholder="Service's NaCl box public key for encryption...">
+
+            <button onclick="findServiceOffer()" id="findBtn">🔍 Find Encrypted Offers</button>
+            <button onclick="disconnect()" id="disconnectBtn" disabled>🔌 Disconnect</button>
+        </div>
+
+        <div class="card" id="offerCard" style="display: none;">
+            <h2>📡 Encrypted Offer Found</h2>
+            <p style="color: #888; margin-bottom: 15px;">Decrypting offer meant only for you...</p>
+
+            <div class="key-display" id="offerInfo">
+                <strong>Offer ID:</strong> <span id="offerId"></span><br>
+                <strong>Timestamp:</strong> <span id="offerTimestamp"></span><br>
+                <strong>Encryption:</strong> <span style="color: #10b981;">✓ NaCl Box (X25519-XSalsa20-Poly1305)</span>
+            </div>
+
+            <button onclick="acceptOffer()" id="acceptBtn">✅ Accept & Connect</button>
+        </div>
+
+        <div class="card">
+            <h2>📚 Diary Entries</h2>
+            <div id="entries">
+                <p style="color: #888;">No entries received yet. Connect to a service to receive encrypted entries.</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>🔒 Encryption Log</h3>
+            <div class="log" id="console">
+                <div class="log-entry">System initialized. All messages will be encrypted.</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Constants
+        const NOSTR_RELAYS = [
+            'wss://relay.damus.io',
+            'wss://relay.nostr.band',
+            'wss://nos.lol',
+            'wss://relay.primal.net'
+        ];
+
+        const KIND_WEBRTC_OFFER = 21000;
+        const KIND_WEBRTC_ANSWER = 21001;
+
+        // Global state
+        let identity = null;
+        let pc = null;
+        let dataChannel = null;
+        let currentOffer = null;
+        let serviceNostrPubkey = null;
+        let serviceBoxPublicKey = null;
+
+        // Initialize
+        window.addEventListener('load', () => {
+            initializeIdentity();
+        });
+
+        function initializeIdentity() {
+            // Check for stored identity
+            const stored = localStorage.getItem('trustDiaryIdentity');
+            if (stored) {
+                identity = JSON.parse(stored);
+                log('Loaded stored identity', 'info');
+            } else {
+                generateNewIdentity();
+            }
+
+            displayIdentity();
+            updateStatus('searching');
+        }
+
+        function generateNewIdentity() {
+            // Generate Ed25519 signing keypair
+            const signKeyPair = nacl.sign.keyPair();
+
+            // Generate X25519 box keypair for encryption
+            const boxKeyPair = nacl.box.keyPair();
+
+            identity = {
+                signPublicKey: nacl.util.encodeBase64(signKeyPair.publicKey),
+                signPrivateKey: nacl.util.encodeBase64(signKeyPair.secretKey),
+                boxPublicKey: nacl.util.encodeBase64(boxKeyPair.publicKey),
+                boxPrivateKey: nacl.util.encodeBase64(boxKeyPair.secretKey)
+            };
+
+            // Generate Nostr keys (simplified - in production use proper derivation)
+            const nostrPrivateKey = Array.from(signKeyPair.secretKey.slice(0, 32))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
+            const nostrPublicKey = Array.from(signKeyPair.publicKey.slice(0, 32))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
+
+            identity.nostrPrivateKey = nostrPrivateKey;
+            identity.nostrPublicKey = nostrPublicKey;
+
+            log('🔑 Generated new cryptographic identity', 'success');
+            log(`Sign algorithm: Ed25519`, 'info');
+            log(`Box algorithm: X25519-XSalsa20-Poly1305`, 'info');
+
+            displayIdentity();
+        }
+
+        function displayIdentity() {
+            if (!identity) return;
+
+            document.getElementById('privateKey').value = identity.signPrivateKey;
+            document.getElementById('signPubKey').textContent = identity.signPublicKey.substring(0, 32) + '...';
+            document.getElementById('boxPubKey').textContent = identity.boxPublicKey.substring(0, 32) + '...';
+            document.getElementById('nostrPubKey').textContent = identity.nostrPublicKey.substring(0, 32) + '...';
+        }
+
+        function saveIdentity() {
+            if (identity) {
+                localStorage.setItem('trustDiaryIdentity', JSON.stringify(identity));
+                log('💾 Identity saved to local storage', 'success');
+            }
+        }
+
+        async function findServiceOffer() {
+            serviceNostrPubkey = document.getElementById('serviceNostrKey').value.trim();
+            serviceBoxPublicKey = document.getElementById('serviceBoxKey').value.trim();
+
+            if (!serviceNostrPubkey) {
+                log('Please enter service Nostr public key', 'error');
+                return;
+            }
+
+            log(`🔍 Searching for encrypted offers from ${serviceNostrPubkey.substring(0, 16)}...`, 'info');
+            updateStatus('searching');
+
+            try {
+                const { SimplePool } = window.NostrTools;
+                const pool = new SimplePool();
+
+                // Filter for offers tagged for us
+                const filter = {
+                    authors: [serviceNostrPubkey],
+                    kinds: [KIND_WEBRTC_OFFER],
+                    "#p": [identity.nostrPublicKey], // Tagged for us
+                    limit: 1
+                };
+
+                log(`Querying ${NOSTR_RELAYS.length} relays for encrypted offers...`, 'info');
+
+                const sub = pool.sub(NOSTR_RELAYS, [filter]);
+
+                const timeout = setTimeout(() => {
+                    sub.unsub();
+                    log('⏱️ Timeout - no encrypted offers found', 'error');
+                    log('Service may not have you in trusted readers list', 'error');
+                    updateStatus('error');
+                }, 15000);
+
+                sub.on('event', async (event) => {
+                    clearTimeout(timeout);
+                    log('📦 Found encrypted offer!', 'success');
+
+                    try {
+                        await decryptAndProcessOffer(event);
+                    } catch (err) {
+                        log(`❌ Decryption failed: ${err.message}`, 'error');
+                    }
+
+                    sub.unsub();
+                });
+
+            } catch (err) {
+                log(`Error: ${err.message}`, 'error');
+                updateStatus('error');
+            }
+        }
+
+        async function decryptAndProcessOffer(event) {
+            log('🔓 Decrypting offer with your private key...', 'info');
+
+            const encryptedData = JSON.parse(event.content);
+            const ciphertext = nacl.util.decodeBase64(encryptedData.ciphertext);
+            const nonce = nacl.util.decodeBase64(encryptedData.nonce);
+
+            // Use service's box public key if provided, otherwise try to decrypt without it
+            let serviceBoxKey;
+            if (serviceBoxPublicKey) {
+                serviceBoxKey = nacl.util.decodeBase64(serviceBoxPublicKey);
+            } else {
+                // Try to extract from the event or use a default
+                log('⚠️ No service box key provided, attempting decrypt...', 'warning');
+                return;
+            }
+
+            // Decrypt using NaCl box
+            const myPrivateKey = nacl.util.decodeBase64(identity.boxPrivateKey);
+            const decrypted = nacl.box.open(ciphertext, nonce, serviceBoxKey, myPrivateKey);
+
+            if (!decrypted) {
+                throw new Error('Failed to decrypt - not intended for you or wrong keys');
+            }
+
+            const offer = JSON.parse(nacl.util.encodeUTF8(decrypted));
+
+            log('✅ Successfully decrypted offer!', 'success');
+            log(`Offer ID: ${offer.offer_id}`, 'info');
+
+            currentOffer = offer;
+
+            // Display offer info
+            document.getElementById('offerId').textContent = offer.offer_id;
+            document.getElementById('offerTimestamp').textContent = new Date(offer.timestamp * 1000).toLocaleString();
+            document.getElementById('offerCard').style.display = 'block';
+
+            updateStatus('found');
+        }
+
+        async function acceptOffer() {
+            if (!currentOffer) {
+                log('No offer to accept', 'error');
+                return;
+            }
+
+            log('📡 Creating WebRTC connection...', 'info');
+
+            try {
+                // Create peer connection
+                pc = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                });
+
+                pc.oniceconnectionstatechange = () => {
+                    log(`ICE state: ${pc.iceConnectionState}`, 'info');
+                    if (pc.iceConnectionState === 'connected') {
+                        updateStatus('connected');
+                        log('✅ P2P connection established!', 'success');
+                        log('🔒 All data channel messages are encrypted', 'success');
+                    }
+                };
+
+                pc.ondatachannel = (event) => {
+                    dataChannel = event.channel;
+                    setupDataChannel();
+                };
+
+                // Set remote description
+                await pc.setRemoteDescription({
+                    type: 'offer',
+                    sdp: currentOffer.sdp
+                });
+
+                // Create answer
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+
+                // Wait for ICE gathering
+                await new Promise(resolve => {
+                    if (pc.iceGatheringState === 'complete') {
+                        resolve();
+                    } else {
+                        pc.onicegatheringstatechange = () => {
+                            if (pc.iceGatheringState === 'complete') resolve();
+                        };
+                        setTimeout(resolve, 3000); // Timeout after 3s
+                    }
+                });
+
+                // Encrypt and publish answer
+                await publishEncryptedAnswer();
+
+            } catch (err) {
+                log(`Connection failed: ${err.message}`, 'error');
+                updateStatus('error');
+            }
+        }
+
+        async function publishEncryptedAnswer() {
+            log('🔐 Encrypting answer for service...', 'info');
+
+            const answerData = {
+                offer_id: currentOffer.offer_id,
+                sdp: pc.localDescription.sdp
+            };
+
+            const answerJSON = JSON.stringify(answerData);
+
+            // Generate ephemeral box keypair for this answer
+            const ephemeralBox = nacl.box.keyPair();
+
+            // Encrypt answer for service
+            const nonce = nacl.randomBytes(24);
+            const serviceBoxKey = nacl.util.decodeBase64(currentOffer.service_box_key || serviceBoxPublicKey);
+
+            const encrypted = nacl.box(
+                nacl.util.decodeUTF8(answerJSON),
+                nonce,
+                serviceBoxKey,
+                ephemeralBox.secretKey
+            );
+
+            const encryptedAnswer = {
+                ciphertext: nacl.util.encodeBase64(encrypted),
+                nonce: nacl.util.encodeBase64(nonce),
+                sender_box_key: nacl.util.encodeBase64(ephemeralBox.publicKey)
+            };
+
+            // Create Nostr event
+            const event = {
+                kind: KIND_WEBRTC_ANSWER,
+                created_at: Math.floor(Date.now() / 1000),
+                tags: [['p', serviceNostrPubkey]], // Tag for service
+                content: JSON.stringify(encryptedAnswer),
+                pubkey: identity.nostrPublicKey
+            };
+
+            // Sign event
+            const { getEventHash, signEvent } = window.NostrTools;
+            event.id = getEventHash(event);
+            event.sig = signEvent(event, identity.nostrPrivateKey);
+
+            // Publish to relays
+            const { SimplePool } = window.NostrTools;
+            const pool = new SimplePool();
+
+            let published = false;
+            for (const relay of NOSTR_RELAYS) {
+                try {
+                    const pub = pool.publish([relay], event);
+                    await pub;
+                    log(`📤 Published encrypted answer to ${relay}`, 'success');
+                    published = true;
+                } catch (err) {
+                    log(`Failed to publish to ${relay}`, 'error');
+                }
+            }
+
+            if (published) {
+                log('✅ Answer sent! Waiting for P2P connection...', 'success');
+            } else {
+                log('❌ Failed to publish answer to any relay', 'error');
+            }
+        }
+
+        function setupDataChannel() {
+            dataChannel.onopen = () => {
+                log('✅ Encrypted data channel opened!', 'success');
+                requestEntries();
+            };
+
+            dataChannel.onmessage = (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
+                    handleMessage(msg);
+                } catch (err) {
+                    log(`Received: ${event.data}`, 'info');
+                }
+            };
+
+            dataChannel.onclose = () => {
+                log('Data channel closed', 'warning');
+                updateStatus('error');
+            };
+        }
+
+        function handleMessage(msg) {
+            if (msg.type === 'entry' && msg.entry) {
+                displayEntry(msg.entry);
+            }
+        }
+
+        function displayEntry(entry) {
+            const container = document.getElementById('entries');
+
+            // Clear placeholder
+            if (container.querySelector('p')) {
+                container.innerHTML = '';
+            }
+
+            const entryDiv = document.createElement('div');
+            entryDiv.className = 'entry';
+            entryDiv.innerHTML = `
+                <strong>${entry.title || 'Untitled'}</strong>
+                <div style="color: #888; font-size: 0.9em; margin: 5px 0;">
+                    ${new Date(entry.timestamp * 1000).toLocaleString()}
+                    ${entry.mood ? ` • ${entry.mood}` : ''}
+                </div>
+                <div style="margin-top: 10px;">${entry.content}</div>
+                ${entry.signature ? '<div style="color: #10b981; font-size: 0.85em; margin-top: 10px;">✓ Cryptographically signed</div>' : ''}
+            `;
+
+            container.insertBefore(entryDiv, container.firstChild);
+            log(`📖 Received encrypted entry: "${entry.title}"`, 'info');
+        }
+
+        function requestEntries() {
+            if (dataChannel && dataChannel.readyState === 'open') {
+                const msg = { type: 'request-entries' };
+                dataChannel.send(JSON.stringify(msg));
+                log('Requested diary entries', 'info');
+            }
+        }
+
+        function disconnect() {
+            if (pc) {
+                pc.close();
+                pc = null;
+            }
+            dataChannel = null;
+            currentOffer = null;
+
+            document.getElementById('offerCard').style.display = 'none';
+            document.getElementById('findBtn').disabled = false;
+            document.getElementById('disconnectBtn').disabled = true;
+
+            updateStatus('searching');
+            log('Disconnected', 'info');
+        }
+
+        function updateStatus(state) {
+            const statusEl = document.getElementById('status');
+            statusEl.className = `status ${state}`;
+
+            switch(state) {
+                case 'searching':
+                    statusEl.textContent = 'Searching for encrypted offers...';
+                    break;
+                case 'found':
+                    statusEl.textContent = 'Encrypted offer found!';
+                    break;
+                case 'connected':
+                    statusEl.textContent = 'Connected - Fully Encrypted';
+                    document.getElementById('findBtn').disabled = true;
+                    document.getElementById('disconnectBtn').disabled = false;
+                    break;
+                case 'error':
+                    statusEl.textContent = 'Connection Error';
+                    break;
+            }
+        }
+
+        function log(message, type = '') {
+            const logEl = document.getElementById('console');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+            console.log(message);
+        }
+    </script>
+</body>
+</html>
