@@ -218,10 +218,12 @@
                 const filter = {
                     authors: [serviceNostrPubkey],
                     kinds: [KIND_WEBRTC_OFFER],
-                    limit: 1
+                    limit: 5  // Get more offers
                 };
 
                 log(`Querying ${NOSTR_RELAYS.length} relays...`, 'info');
+                log(`Looking for offers from author: ${serviceNostrPubkey}`, 'info');
+                log(`Event kind: ${KIND_WEBRTC_OFFER}`, 'info');
 
                 const sub = pool.sub(NOSTR_RELAYS, [filter]);
 
@@ -230,7 +232,7 @@
                     log('⏱️ Timeout - no offers found', 'error');
                     log('Service may be offline or not publishing', 'error');
                     updateStatus('error');
-                }, 15000);
+                }, 35000);  // Increased to 35s to ensure we catch at least one publication cycle
 
                 sub.on('event', async (event) => {
                     clearTimeout(timeout);

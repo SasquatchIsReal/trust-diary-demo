@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -97,56 +96,15 @@ func main() {
 }
 
 func (s *TrustDiaryService) loadOrCreateIdentity() error {
-	identityFile := "./diary-data/identity.json"
+	// Use hardcoded keys for demo consistency
+	// This ensures the client always knows the service's key
+	s.nostrPrivKey = "57cafe5a87555d0271c2fb995f58e05ba80896ea81b5ca0b6e602bbcdb2cc0da"
+	s.nostrPubKey = "57cafe5a87555d0271c2fb995f58e05ba80896ea81b5ca0b6e602bbcdb2cc0da"
 
-	if data, err := os.ReadFile(identityFile); err == nil {
-		// Load existing identity
-		var identity struct {
-			SignPublicKey  string `json:"sign_public_key"`
-			SignPrivateKey string `json:"sign_private_key"`
-		}
-
-		if err := json.Unmarshal(data, &identity); err != nil {
-			return err
-		}
-
-		s.signPublicKey, _ = base64.StdEncoding.DecodeString(identity.SignPublicKey)
-		s.signPrivateKey, _ = base64.StdEncoding.DecodeString(identity.SignPrivateKey)
-
-		log.Println("📂 Loaded existing identity")
-	} else {
-		// Generate new identity (Ed25519 only)
-		signPub, signPriv, _ := sign.GenerateKey(rand.Reader)
-
-		s.signPublicKey = signPub[:]
-		s.signPrivateKey = signPriv[:]
-
-		// Save identity
-		identity := map[string]string{
-			"sign_public_key":  base64.StdEncoding.EncodeToString(s.signPublicKey),
-			"sign_private_key": base64.StdEncoding.EncodeToString(s.signPrivateKey),
-		}
-
-		data, _ := json.MarshalIndent(identity, "", "  ")
-		os.MkdirAll("./diary-data", 0755)
-		os.WriteFile(identityFile, data, 0600)
-
-		log.Println("🔑 Generated new identity")
-	}
-
-	// Generate Nostr keys from Ed25519
-	if len(s.signPrivateKey) >= 32 {
-		s.nostrPrivKey = fmt.Sprintf("%x", s.signPrivateKey[:32])
-	} else {
-		// Fallback to a deterministic key
-		s.nostrPrivKey = "57cafe5a87555d0271c2fb995f58e05ba80896ea81b5ca0b6e602bbcdb2cc0da"
-	}
-	if len(s.signPublicKey) >= 32 {
-		s.nostrPubKey = fmt.Sprintf("%x", s.signPublicKey[:32])
-	} else {
-		// Use known public key
-		s.nostrPubKey = "57cafe5a87555d0271c2fb995f58e05ba80896ea81b5ca0b6e602bbcdb2cc0da"
-	}
+	// Generate Ed25519 keys for signing
+	signPub, signPriv, _ := sign.GenerateKey(rand.Reader)
+	s.signPublicKey = signPub[:]
+	s.signPrivateKey = signPriv[:]
 
 	npub, _ := nip19.EncodePublicKey(s.nostrPubKey)
 	log.Printf("📍 Service Nostr pubkey: %s", s.nostrPubKey)

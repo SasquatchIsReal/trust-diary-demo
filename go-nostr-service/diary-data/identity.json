@@ -1,7 +1,4 @@
 {
-  "boxPrivateKey": "xp7o+guaI8gusXnSnSozZwkXd2T2F2RydEMzIaUGUJc=",
-  "boxPublicKey": "poHI5TEtusic3z5n3iqI6SC53bQNu4DXHGDHnTMKHhA=",
-  "createdAt": "2025-09-15T22:51:31-05:00",
-  "privateKey": "rSNPfgS6n0s6P/xc9cVaTEEI2ULShAlEZwhmxMaq5BBw887JOF6n9qVIPm3b2jxKBHNINaV7dnzkyjuceB38qg==",
-  "publicKey": "cPPOyThep/alSD5t29o8SgRzSDWle3Z85Mo7nHgd/Ko="
+  "sign_private_key": "t0Wv6OGQ58vTER82Wp6zjpwxih/G3WQSFw5LQQjP+jsL97+zMGy9FRIoUxkXGJtIPkuR8pvfEk5/RYW0SwjSvg==",
+  "sign_public_key": "C/e/szBsvRUSKFMZFxibSD5LkfKb3xJOf0WFtEsI0r4="
 }
