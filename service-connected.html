@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trust Diary - Service Connected</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: #0a0e27;
+            color: #fff;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .card {
+            background: #112240;
+            border: 1px solid #233554;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            margin-bottom: 20px;
+        }
+        .status.connected { background: #10b981; }
+        .status.connecting { background: #f59e0b; }
+        .status.disconnected { background: #64748b; }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover { transform: translateY(-2px); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        textarea {
+            width: 100%;
+            padding: 12px;
+            background: #0a0e27;
+            border: 1px solid #233554;
+            color: #fff;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-family: 'Courier New', monospace;
+            min-height: 150px;
+        }
+        #messages {
+            max-height: 300px;
+            overflow-y: auto;
+            padding: 15px;
+            background: #0a0e27;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        .message {
+            padding: 8px;
+            margin-bottom: 5px;
+            border-left: 3px solid #667eea;
+            background: rgba(102, 126, 234, 0.1);
+        }
+        .log { color: #8892b0; font-size: 0.9em; }
+        .success { color: #10b981; }
+        .error { color: #ef4444; }
+        .info { color: #3b82f6; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Trust Diary Service Connection</h1>
+        <p style="color: #8892b0; margin-bottom: 20px;">Connect to your persistent trust diary service</p>
+
+        <div class="status disconnected" id="status">Disconnected</div>
+
+        <div class="card">
+            <h2>Service Connection</h2>
+            <p style="margin-bottom: 15px;">Your service is running at:</p>
+            <p style="font-family: monospace; color: #667eea; margin-bottom: 15px;">
+                Local: http://100.85.100.54:3334<br>
+                Public: https://trust-diary-demo.loca.lt
+            </p>
+            <button onclick="fetchOffer()">🔌 Connect via Manual Exchange</button>
+            <button onclick="connectViaNostr()">🌐 Connect via Nostr</button>
+        </div>
+
+        <div class="card" id="manualSection" style="display: none;">
+            <h3>Manual WebRTC Exchange</h3>
+            <label>Service Offer:</label>
+            <textarea id="offerText" readonly placeholder="Fetching offer from service..."></textarea>
+
+            <button onclick="createAnswer()">Generate Answer</button>
+
+            <div id="answerSection" style="display: none; margin-top: 20px;">
+                <label>Your Answer (this will be sent to service):</label>
+                <textarea id="answerText" readonly></textarea>
+                <button onclick="submitAnswer()">📤 Submit Answer to Service</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Diary Entries</h3>
+            <div id="messages">
+                <p class="log">No entries yet. Connect to service to receive entries.</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Console</h3>
+            <div id="console" style="background: #000; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 0.8em; max-height: 200px; overflow-y: auto;">
+                <div class="log">Ready to connect...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let pc = null;
+        let dataChannel = null;
+        let currentOffer = null;
+        const SERVICE_URL = 'https://trust-diary-demo.loca.lt'; // Your localtunnel URL
+
+        function log(msg, type = 'log') {
+            const consoleEl = document.getElementById('console');
+            const entry = document.createElement('div');
+            entry.className = type;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            consoleEl.appendChild(entry);
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+            console.log(msg);
+        }
+
+        async function fetchOffer() {
+            log('Fetching offer from service...', 'info');
+            updateStatus('connecting');
+
+            try {
+                const response = await fetch(`${SERVICE_URL}/api/offer`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+                const offer = await response.json();
+                currentOffer = offer;
+
+                document.getElementById('offerText').value = JSON.stringify(offer, null, 2);
+                document.getElementById('manualSection').style.display = 'block';
+
+                log(`✅ Received offer ID: ${offer.offerId}`, 'success');
+
+                // Auto-create answer
+                await createAnswer();
+
+            } catch (err) {
+                log(`❌ Failed to fetch offer: ${err.message}`, 'error');
+                log('Make sure the service is accessible at: ' + SERVICE_URL, 'error');
+                updateStatus('disconnected');
+            }
+        }
+
+        async function createAnswer() {
+            if (!currentOffer) {
+                log('No offer to respond to', 'error');
+                return;
+            }
+
+            log('Creating WebRTC answer...', 'info');
+
+            try {
+                // Create peer connection
+                pc = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                });
+
+                // Set up event handlers
+                pc.oniceconnectionstatechange = () => {
+                    log(`ICE state: ${pc.iceConnectionState}`, 'info');
+                    if (pc.iceConnectionState === 'connected') {
+                        updateStatus('connected');
+                    }
+                };
+
+                pc.ondatachannel = (event) => {
+                    dataChannel = event.channel;
+                    setupDataChannel();
+                    log('✅ Data channel received!', 'success');
+                };
+
+                // Set remote description
+                await pc.setRemoteDescription({
+                    type: 'offer',
+                    sdp: currentOffer.sdp
+                });
+
+                // Create answer
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+
+                // Wait for ICE gathering
+                await new Promise((resolve) => {
+                    if (pc.iceGatheringState === 'complete') {
+                        resolve();
+                    } else {
+                        pc.onicegatheringstatechange = () => {
+                            if (pc.iceGatheringState === 'complete') {
+                                resolve();
+                            }
+                        };
+                        // Timeout after 3 seconds
+                        setTimeout(resolve, 3000);
+                    }
+                });
+
+                const answerData = {
+                    offerId: currentOffer.offerId,
+                    sdp: pc.localDescription.sdp
+                };
+
+                document.getElementById('answerText').value = JSON.stringify(answerData, null, 2);
+                document.getElementById('answerSection').style.display = 'block';
+
+                log('✅ Answer created, ready to submit', 'success');
+
+                // Auto-submit answer
+                await submitAnswer();
+
+            } catch (err) {
+                log(`❌ Failed to create answer: ${err.message}`, 'error');
+                updateStatus('disconnected');
+            }
+        }
+
+        async function submitAnswer() {
+            const answerText = document.getElementById('answerText').value;
+
+            log('Submitting answer to service...', 'info');
+
+            try {
+                const response = await fetch(`${SERVICE_URL}/api/answer`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: answerText
+                });
+
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+                const result = await response.json();
+                log('✅ Answer submitted successfully!', 'success');
+                log('Waiting for connection...', 'info');
+
+            } catch (err) {
+                log(`❌ Failed to submit answer: ${err.message}`, 'error');
+            }
+        }
+
+        function setupDataChannel() {
+            dataChannel.onopen = () => {
+                log('✅ Data channel OPEN!', 'success');
+                updateStatus('connected');
+
+                // Send initial message
+                sendMessage({ type: 'hello', from: 'browser' });
+            };
+
+            dataChannel.onclose = () => {
+                log('Data channel closed', 'info');
+                updateStatus('disconnected');
+            };
+
+            dataChannel.onmessage = (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
+                    handleMessage(msg);
+                } catch (err) {
+                    log(`Received: ${event.data}`, 'log');
+                }
+            };
+        }
+
+        function handleMessage(msg) {
+            log(`Received message type: ${msg.type}`, 'info');
+
+            if (msg.type === 'entry' && msg.entry) {
+                displayEntry(msg.entry);
+            } else if (msg.type === 'challenge') {
+                // Respond to auth challenge
+                sendMessage({
+                    type: 'response',
+                    timestamp: Date.now()
+                });
+            }
+        }
+
+        function displayEntry(entry) {
+            const messagesDiv = document.getElementById('messages');
+
+            // Clear placeholder
+            if (messagesDiv.querySelector('.log')) {
+                messagesDiv.innerHTML = '';
+            }
+
+            const entryDiv = document.createElement('div');
+            entryDiv.className = 'message';
+            entryDiv.innerHTML = `
+                <strong>${entry.date || new Date().toLocaleString()}</strong><br>
+                <div style="margin-top: 5px;">${entry.content}</div>
+                ${entry.mood ? `<div style="color: #8892b0; font-size: 0.9em; margin-top: 5px;">Mood: ${entry.mood} | Weather: ${entry.weather}</div>` : ''}
+            `;
+
+            messagesDiv.insertBefore(entryDiv, messagesDiv.firstChild);
+            log(`📖 Displayed diary entry`, 'success');
+        }
+
+        function sendMessage(msg) {
+            if (dataChannel && dataChannel.readyState === 'open') {
+                dataChannel.send(JSON.stringify(msg));
+                log(`Sent message: ${msg.type}`, 'info');
+            }
+        }
+
+        function updateStatus(state) {
+            const statusEl = document.getElementById('status');
+            statusEl.className = `status ${state}`;
+
+            switch(state) {
+                case 'connected':
+                    statusEl.textContent = 'Connected to Service';
+                    break;
+                case 'connecting':
+                    statusEl.textContent = 'Connecting...';
+                    break;
+                case 'disconnected':
+                    statusEl.textContent = 'Disconnected';
+                    break;
+            }
+        }
+
+        async function connectViaNostr() {
+            log('Nostr discovery not implemented in this version', 'error');
+            log('Use Manual Exchange instead', 'info');
+            fetchOffer();
+        }
+
+        // Auto-connect on load
+        window.addEventListener('load', () => {
+            log('Page loaded. Click "Connect via Manual Exchange" to connect to your service.', 'info');
+        });
+    </script>
+</body>
+</html>
