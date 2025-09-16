@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Nostr Query</title>
+    <script src="https://unpkg.com/nostr-tools@1.17.0/lib/nostr.bundle.js"></script>
+</head>
+<body>
+    <h1>Testing Nostr Query</h1>
+    <button onclick="testQuery()">Test Query</button>
+    <pre id="output"></pre>
+
+    <script>
+        const NOSTR_RELAYS = [
+            'wss://relay.damus.io',
+            'wss://relay.nostr.band',
+            'wss://nos.lol',
+            'wss://relay.primal.net'
+        ];
+
+        async function testQuery() {
+            const output = document.getElementById('output');
+            output.textContent = 'Starting query...\n';
+
+            try {
+                const { SimplePool } = window.NostrTools;
+                const pool = new SimplePool();
+
+                // Query for ANY events from this author
+                const filter = {
+                    authors: ['dac4dae2b6043ff8f61191c461a98b0e0b50ba3285c298a53cf36262e9e93fae'],
+                    limit: 10
+                };
+
+                output.textContent += `Querying with filter: ${JSON.stringify(filter, null, 2)}\n`;
+                output.textContent += `Relays: ${NOSTR_RELAYS.join(', ')}\n\n`;
+
+                const events = [];
+                const sub = pool.sub(NOSTR_RELAYS, [filter]);
+
+                sub.on('event', (event) => {
+                    events.push(event);
+                    output.textContent += `Found event! Kind: ${event.kind}, ID: ${event.id}\n`;
+                    output.textContent += `Content preview: ${event.content.substring(0, 100)}...\n\n`;
+                });
+
+                // Wait 10 seconds
+                await new Promise(resolve => setTimeout(resolve, 10000));
+
+                sub.unsub();
+                output.textContent += `\nQuery complete. Found ${events.length} events.\n`;
+
+                if (events.length > 0) {
+                    output.textContent += '\nFull events:\n';
+                    output.textContent += JSON.stringify(events, null, 2);
+                }
+
+            } catch (err) {
+                output.textContent += `Error: ${err.message}\n`;
+                console.error(err);
+            }
+        }
+
+        // Auto-run on load
+        window.onload = () => {
+            setTimeout(testQuery, 1000);
+        };
+    </script>
+</body>
+</html>

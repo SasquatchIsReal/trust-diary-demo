@@ -1,0 +1,368 @@
+{
+  "config": {
+    "configFile": "/home/trankin/backpack/trust-diary-demo/playwright.config.ts",
+    "rootDir": "/home/trankin/backpack/trust-diary-demo/tests",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "reporter": [
+      [
+        "html",
+        {
+          "outputFolder": "playwright-report"
+        }
+      ],
+      [
+        "json",
+        {
+          "outputFile": "test-results/results.json"
+        }
+      ],
+      [
+        "list",
+        null
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "quiet": false,
+    "projects": [
+      {
+        "outputDir": "/home/trankin/backpack/trust-diary-demo/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/home/trankin/backpack/trust-diary-demo/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 60000
+      }
+    ],
+    "shard": null,
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.55.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "simple-p2p.spec.ts",
+      "file": "simple-p2p.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Simple P2P Trust Diary",
+          "file": "simple-p2p.spec.ts",
+          "line": 6,
+          "column": 6,
+          "specs": [
+            {
+              "title": "Can discover service offers via Nostr",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 36531,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoContain\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // indexOf\u001b[22m\n\nExpected substring: \u001b[32m\"found\"\u001b[39m\nReceived string:    \u001b[31m\"Connection Error\"\u001b[39m",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoContain\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // indexOf\u001b[22m\n\nExpected substring: \u001b[32m\"found\"\u001b[39m\nReceived string:    \u001b[31m\"Connection Error\"\u001b[39m\n    at /home/trankin/backpack/trust-diary-demo/tests/simple-p2p.spec.ts:114:26",
+                        "location": {
+                          "file": "/home/trankin/backpack/trust-diary-demo/tests/simple-p2p.spec.ts",
+                          "column": 26,
+                          "line": 114
+                        },
+                        "snippet": "  112 |\n  113 |       // This should fail to highlight the issue\n> 114 |       expect(statusText).toContain('found');\n      |                          ^\n  115 |     }\n  116 |   });\n  117 |"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/home/trankin/backpack/trust-diary-demo/tests/simple-p2p.spec.ts",
+                            "column": 26,
+                            "line": 114
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoContain\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // indexOf\u001b[22m\n\nExpected substring: \u001b[32m\"found\"\u001b[39m\nReceived string:    \u001b[31m\"Connection Error\"\u001b[39m\n\n  112 |\n  113 |       // This should fail to highlight the issue\n> 114 |       expect(statusText).toContain('found');\n      |                          ^\n  115 |     }\n  116 |   });\n  117 |\n    at /home/trankin/backpack/trust-diary-demo/tests/simple-p2p.spec.ts:114:26"
+                        }
+                      ],
+                      "stdout": [
+                        {
+                          "text": "Starting simple trust diary service...\n"
+                        },
+                        {
+                          "text": "Browser: 📍 Your Nostr pubkey: f7bd761643d12dbc...\n"
+                        },
+                        {
+                          "text": "Searching for service offers...\n"
+                        },
+                        {
+                          "text": "Browser: 🔍 Searching for offers from 57cafe5a87555d02...\n"
+                        },
+                        {
+                          "text": "Browser: Querying 4 relays...\n"
+                        },
+                        {
+                          "text": "Browser: Looking for offers from author: 57cafe5a87555d0271c2fb995f58e05ba80896ea81b5ca0b6e602bbcdb2cc0da\n"
+                        },
+                        {
+                          "text": "Browser: Event kind: 21000\n"
+                        },
+                        {
+                          "text": "Browser: ⏱️ Timeout - no offers found\n"
+                        },
+                        {
+                          "text": "Browser: Service may be offline or not publishing\n"
+                        },
+                        {
+                          "text": "Final status: Connection Error\n"
+                        },
+                        {
+                          "text": "Console logs: \n                System ready. WebRTC encrypts all communications with DTLS-SRTP.\n            [4:11:18 PM] 📍 Your Nostr pubkey: f7bd761643d12dbc...[4:11:19 PM] 🔍 Searching for offers from 57cafe5a87555d02...[4:11:19 PM] Querying 4 relays...[4:11:19 PM] Looking for offers from author: 57cafe5a87555d0271c2fb995f58e05ba80896ea81b5ca0b6e602bbcdb2cc0da[4:11:19 PM] Event kind: 21000[4:11:54 PM] ⏱️ Timeout - no offers found[4:11:54 PM] Service may be offline or not publishing\n"
+                        },
+                        {
+                          "text": "❌ No offers found - debugging...\n"
+                        },
+                        {
+                          "text": "All browser logs: System ready. WebRTC encrypts all communications with DTLS-SRTP.\n[4:11:18 PM] 📍 Your Nostr pubkey: f7bd761643d12dbc...\n[4:11:19 PM] 🔍 Searching for offers from 57cafe5a87555d02...\n[4:11:19 PM] Querying 4 relays...\n[4:11:19 PM] Looking for offers from author: 57cafe5a87555d0271c2fb995f58e05ba80896ea81b5ca0b6e602bbcdb2cc0da\n[4:11:19 PM] Event kind: 21000\n[4:11:54 PM] ⏱️ Timeout - no offers found\n[4:11:54 PM] Service may be offline or not publishing\n"
+                        },
+                        {
+                          "text": "Stopping service...\n"
+                        }
+                      ],
+                      "stderr": [
+                        {
+                          "text": "Service Error: 2025/09/16 16:11:13 🚀 Starting Trust Diary Service (Simplified Nostr + WebRTC)\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:11:13 📍 Service Nostr pubkey: 57cafe5a87555d0271c2fb995f58e05ba80896ea81b5ca0b6e602bbcdb2cc0da\n2025/09/16 16:11:13 📍 Service npub: npub12l90uk5824wsyuwzlwv47k8qtw5q39h2sx6u5zmwvq4mekevcrdqm7pe2x\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:11:13 📚 Loaded 3 test entries\n2025/09/16 16:11:13 👥 Configured 1 trusted readers\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:11:13 ✅ Connected to 4 Nostr relays\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:11:13 📤 Published offer to wss://relay.damus.io\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:11:14 📤 Published offer to wss://relay.nostr.band\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:11:14 📤 Published offer to wss://nos.lol\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:11:15 📤 Published offer to wss://relay.primal.net\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:11:15 📡 Published offer to 4/4 relays (ID: 68c9d271)\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:11:45 📤 Published offer to wss://relay.damus.io\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:11:46 📤 Published offer to wss://relay.nostr.band\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:11:46 📤 Published offer to wss://nos.lol\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:11:47 📤 Published offer to wss://relay.primal.net\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:11:47 📡 Published offer to 4/4 relays (ID: 68c9d291)\n\n"
+                        }
+                      ],
+                      "retry": 0,
+                      "startTime": "2025-09-16T21:11:13.211Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/home/trankin/backpack/trust-diary-demo/test-results/simple-p2p-Simple-P2P-Trus-dccb9-er-service-offers-via-Nostr-chromium/test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/home/trankin/backpack/trust-diary-demo/test-results/simple-p2p-Simple-P2P-Trus-dccb9-er-service-offers-via-Nostr-chromium/video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/home/trankin/backpack/trust-diary-demo/test-results/simple-p2p-Simple-P2P-Trus-dccb9-er-service-offers-via-Nostr-chromium/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/home/trankin/backpack/trust-diary-demo/tests/simple-p2p.spec.ts",
+                        "column": 26,
+                        "line": 114
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "499317cca27a58bfca81-36cd7f5af732b78bb9e2",
+              "file": "simple-p2p.spec.ts",
+              "line": 50,
+              "column": 3
+            },
+            {
+              "title": "Service publishes offers regularly",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "timedOut",
+                      "duration": 61811,
+                      "error": {
+                        "message": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m",
+                        "stack": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m"
+                      },
+                      "errors": [
+                        {
+                          "message": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m"
+                        }
+                      ],
+                      "stdout": [
+                        {
+                          "text": "Starting simple trust diary service...\n"
+                        },
+                        {
+                          "text": "Stopping service...\n"
+                        }
+                      ],
+                      "stderr": [
+                        {
+                          "text": "Service Error: 2025/09/16 16:11:56 🚀 Starting Trust Diary Service (Simplified Nostr + WebRTC)\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:11:56 📍 Service Nostr pubkey: 57cafe5a87555d0271c2fb995f58e05ba80896ea81b5ca0b6e602bbcdb2cc0da\n2025/09/16 16:11:56 📍 Service npub: npub12l90uk5824wsyuwzlwv47k8qtw5q39h2sx6u5zmwvq4mekevcrdqm7pe2x\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:11:56 📚 Loaded 3 test entries\n2025/09/16 16:11:56 👥 Configured 1 trusted readers\n2025/09/16 16:11:56 ✅ Connected to 4 Nostr relays\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:11:56 📤 Published offer to wss://relay.damus.io\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:11:56 📤 Published offer to wss://relay.nostr.band\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:11:57 📤 Published offer to wss://nos.lol\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:11:58 📤 Published offer to wss://relay.primal.net\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:11:58 📡 Published offer to 4/4 relays (ID: 68c9d29c)\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:12:28 📤 Published offer to wss://relay.damus.io\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:12:29 📤 Published offer to wss://relay.nostr.band\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:12:29 📤 Published offer to wss://nos.lol\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:12:30 📤 Published offer to wss://relay.primal.net\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:12:30 📡 Published offer to 4/4 relays (ID: 68c9d2bc)\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:13:00 📤 Published offer to wss://relay.damus.io\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:13:01 📤 Published offer to wss://relay.nostr.band\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:13:02 📤 Published offer to wss://nos.lol\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:13:02 📤 Published offer to wss://relay.primal.net\n\n"
+                        },
+                        {
+                          "text": "Service Error: 2025/09/16 16:13:02 📡 Published offer to 4/4 relays (ID: 68c9d2dc)\n\n"
+                        }
+                      ],
+                      "retry": 0,
+                      "startTime": "2025-09-16T21:11:56.044Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/home/trankin/backpack/trust-diary-demo/test-results/simple-p2p-Simple-P2P-Trus-f088b--publishes-offers-regularly-chromium/test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/home/trankin/backpack/trust-diary-demo/test-results/simple-p2p-Simple-P2P-Trus-f088b--publishes-offers-regularly-chromium/video.webm"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "499317cca27a58bfca81-8de35b3c5edaf42943cd",
+              "file": "simple-p2p.spec.ts",
+              "line": 118,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2025-09-16T21:11:12.967Z",
+    "duration": 110970.521,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 2,
+    "flaky": 0
+  }
+}

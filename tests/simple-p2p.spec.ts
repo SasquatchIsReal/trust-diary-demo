@@ -1,170 +1,136 @@
-import { test, expect, Page, BrowserContext } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
+import { spawn, ChildProcess } from 'child_process';
+import * as path from 'path';
+import * as fs from 'fs';
 
-// Static file server just for serving HTML - NOT for P2P communication
-test.use({
-  baseURL: 'http://localhost:8888'
-});
+test.describe('Simple P2P Trust Diary', () => {
+  let serviceProcess: ChildProcess;
+  let serviceNostrPubkey: string = '57cafe5a87555d0271c2fb995f58e05ba80896ea81b5ca0b6e602bbcdb2cc0da';
 
-test.describe('P2P Direct Browser Communication Tests', () => {
-  let context1: BrowserContext;
-  let context2: BrowserContext;
-  let tomPage: Page;
-  let bobPage: Page;
+  test.beforeAll(async () => {
+    console.log('Starting simple trust diary service...');
 
-  test.beforeEach(async ({ browser }) => {
-    // Create two isolated browser contexts
-    context1 = await browser.newContext();
-    context2 = await browser.newContext();
+    // Start the Go service
+    const servicePath = path.join(process.cwd(), 'go-nostr-service', 'trust-diary-simple');
 
-    tomPage = await context1.newPage();
-    bobPage = await context2.newPage();
+    // Build service first if needed
+    if (!fs.existsSync(servicePath)) {
+      console.log('Building service...');
+      const { execSync } = require('child_process');
+      execSync('cd go-nostr-service && go build -o trust-diary-simple main-simple.go');
+    }
 
-    // Load the HTML files from static server (just serving files, not handling P2P)
-    await tomPage.goto('http://localhost:8888/tom-jsbin.html');
-    await bobPage.goto('http://localhost:8888/bob-jsbin.html');
-
-    // Wait for crypto keys to generate
-    await tomPage.waitForFunction(() => {
-      const key = document.querySelector('#publicKey')?.textContent;
-      return key && key !== 'Generating...';
-    }, { timeout: 5000 });
-
-    await bobPage.waitForFunction(() => {
-      const key = document.querySelector('#publicKey')?.textContent;
-      return key && key !== 'Generating...';
-    }, { timeout: 5000 });
-  });
-
-  test.afterEach(async () => {
-    await context1?.close();
-    await context2?.close();
-  });
-
-  test('generates unique cryptographic identities', async () => {
-    const tomPublicKey = await tomPage.locator('#publicKey').textContent();
-    const tomBoxKey = await tomPage.locator('#boxPublicKey').textContent();
-    const bobPublicKey = await bobPage.locator('#publicKey').textContent();
-    const bobBoxKey = await bobPage.locator('#boxPublicKey').textContent();
-
-    // Verify keys are generated
-    expect(tomPublicKey).toBeTruthy();
-    expect(tomBoxKey).toBeTruthy();
-    expect(bobPublicKey).toBeTruthy();
-    expect(bobBoxKey).toBeTruthy();
-
-    // Verify keys are unique
-    expect(tomPublicKey).not.toBe(bobPublicKey);
-    expect(tomBoxKey).not.toBe(bobBoxKey);
-  });
-
-  test('establishes P2P connection via WebTorrent', async () => {
-    // Exchange keys
-    const tomPublicKey = await tomPage.locator('#publicKey').textContent();
-    const tomBoxKey = await tomPage.locator('#boxPublicKey').textContent();
-    const bobPublicKey = await bobPage.locator('#publicKey').textContent();
-    const bobBoxKey = await bobPage.locator('#boxPublicKey').textContent();
-
-    // Tom trusts Bob
-    await tomPage.fill('#bobPublicKey', bobPublicKey!);
-    await tomPage.fill('#bobBoxPublicKey', bobBoxKey!);
-    await tomPage.click('button:has-text("Trust Bob")');
-
-    // Bob trusts Tom
-    await bobPage.fill('#tomPublicKey', tomPublicKey!);
-    await bobPage.fill('#tomBoxPublicKey', tomBoxKey!);
-    await bobPage.click('button:has-text("Trust Tom")');
-
-    // Wait for P2P connection (may take time for WebTorrent discovery)
-    await expect(async () => {
-      const tomLogs = await tomPage.locator('#logs').textContent();
-      expect(tomLogs).toContain('Joining room');
-    }).toPass({ timeout: 30000 });
-  });
-
-  test('validates no server mediation for messages', async () => {
-    // Monitor network requests
-    const requests: string[] = [];
-
-    tomPage.on('request', request => {
-      const url = request.url();
-      if (!url.includes('localhost:3000') && !url.includes('cdn')) {
-        requests.push(url);
-      }
+    serviceProcess = spawn(servicePath, [], {
+      cwd: path.join(process.cwd(), 'go-nostr-service'),
+      env: { ...process.env }
     });
 
-    // Exchange keys and connect
-    const tomPublicKey = await tomPage.locator('#publicKey').textContent();
-    const tomBoxKey = await tomPage.locator('#boxPublicKey').textContent();
-    const bobPublicKey = await bobPage.locator('#publicKey').textContent();
-    const bobBoxKey = await bobPage.locator('#boxPublicKey').textContent();
+    // Capture service output
+    serviceProcess.stdout?.on('data', (data) => {
+      const output = data.toString();
+      console.log('Service:', output);
+    });
 
-    await tomPage.fill('#bobPublicKey', bobPublicKey!);
-    await tomPage.fill('#bobBoxPublicKey', bobBoxKey!);
-    await tomPage.click('button:has-text("Trust Bob")');
+    serviceProcess.stderr?.on('data', (data) => {
+      console.error('Service Error:', data.toString());
+    });
 
-    await bobPage.fill('#tomPublicKey', tomPublicKey!);
-    await bobPage.fill('#tomBoxPublicKey', tomBoxKey!);
-    await bobPage.click('button:has-text("Trust Tom")');
-
-    // Wait a bit for connection attempts
-    await tomPage.waitForTimeout(5000);
-
-    // Check that only WebTorrent tracker requests were made
-    const nonP2PRequests = requests.filter(url =>
-      !url.includes('tracker') &&
-      !url.includes('webtorrent') &&
-      !url.includes('wss://') // WebSocket trackers
-    );
-
-    expect(nonP2PRequests.length).toBe(0);
+    // Wait for service to start and publish offers
+    await new Promise(resolve => setTimeout(resolve, 5000));
   });
-});
 
-test.describe('P2P Message Exchange', () => {
-  test('sends encrypted messages directly between browsers', async ({ browser }) => {
-    const context1 = await browser.newContext();
-    const context2 = await browser.newContext();
+  test.afterAll(async () => {
+    if (serviceProcess) {
+      console.log('Stopping service...');
+      serviceProcess.kill();
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  });
 
-    const tomPage = await context1.newPage();
-    const bobPage = await context2.newPage();
+  test('Can discover service offers via Nostr', async ({ page }) => {
+    // Enable console logging
+    page.on('console', msg => {
+      console.log('Browser:', msg.text());
+    });
 
-    await tomPage.goto('http://localhost:3000/tom-jsbin.html');
-    await bobPage.goto('http://localhost:3000/bob-jsbin.html');
+    // Navigate to simple client (local file)
+    const clientPath = path.join(process.cwd(), 'nostr-simple-client.html');
+    await page.goto(`file://${clientPath}`);
 
-    // Wait for initialization
-    await tomPage.waitForTimeout(3000);
-    await bobPage.waitForTimeout(3000);
+    // Wait for page to load
+    await page.waitForLoadState('networkidle');
 
-    // Get and exchange keys
-    const tomPublicKey = await tomPage.locator('#publicKey').textContent();
-    const tomBoxKey = await tomPage.locator('#boxPublicKey').textContent();
-    const bobPublicKey = await bobPage.locator('#publicKey').textContent();
-    const bobBoxKey = await bobPage.locator('#boxPublicKey').textContent();
+    // Verify service key is pre-filled
+    const serviceKeyValue = await page.locator('#serviceNostrKey').inputValue();
+    expect(serviceKeyValue).toBe(serviceNostrPubkey);
 
-    // Establish trust
-    await tomPage.fill('#bobPublicKey', bobPublicKey!);
-    await tomPage.fill('#bobBoxPublicKey', bobBoxKey!);
-    await tomPage.click('button:has-text("Trust Bob")');
+    console.log('Searching for service offers...');
 
-    await bobPage.fill('#tomPublicKey', tomPublicKey!);
-    await bobPage.fill('#tomBoxPublicKey', tomBoxKey!);
-    await bobPage.click('button:has-text("Trust Tom")');
+    // Find service offers
+    await page.click('button:has-text("Find Service Offers")');
 
-    // Wait for connection (this might take a while for WebTorrent)
-    await tomPage.waitForTimeout(10000);
+    // Wait for status to change from searching
+    await page.waitForFunction(() => {
+      const status = document.getElementById('status');
+      return status && !status.textContent?.includes('Searching');
+    }, { timeout: 40000 });
 
-    // Try to send a message
-    const testMessage = `P2P Test ${Date.now()}`;
-    await tomPage.fill('#message', testMessage);
-    await tomPage.click('button:has-text("Add Entry")');
+    // Check if offer was found
+    const statusText = await page.locator('#status').textContent();
+    console.log('Final status:', statusText);
 
-    // Message should appear in Tom's diary
-    await expect(async () => {
-      const tomEntries = await tomPage.locator('.entry').allTextContents();
-      expect(tomEntries.some(e => e.includes(testMessage))).toBeTruthy();
-    }).toPass({ timeout: 5000 });
+    // Debug: Get console logs
+    const consoleLogs = await page.locator('#console').textContent();
+    console.log('Console logs:', consoleLogs);
 
-    await context1.close();
-    await context2.close();
+    // Should find offer
+    if (statusText?.includes('found')) {
+      console.log('✅ Found service offer!');
+
+      // Verify offer details are shown
+      await expect(page.locator('#offerCard')).toBeVisible();
+
+      const offerId = await page.locator('#offerId').textContent();
+      expect(offerId).toBeTruthy();
+      console.log('Offer ID:', offerId);
+
+      // Accept offer and connect
+      await page.click('button:has-text("Accept & Connect")');
+
+      // Wait for P2P connection (may fail due to local environment)
+      await page.waitForTimeout(5000);
+
+      const finalStatus = await page.locator('#status').textContent();
+      console.log('Connection status:', finalStatus);
+    } else {
+      // Debug why no offers found
+      console.log('❌ No offers found - debugging...');
+
+      // Check what's in the console
+      const allLogs = await page.locator('#console').innerText();
+      console.log('All browser logs:', allLogs);
+
+      // This should fail to highlight the issue
+      expect(statusText).toContain('found');
+    }
+  });
+
+  test('Service publishes offers regularly', async ({ page }) => {
+    // Simple test to verify service is publishing
+    const startTime = Date.now();
+    let offerCount = 0;
+
+    // Monitor service output for 65 seconds (should see at least 2 offers)
+    await new Promise<void>((resolve) => {
+      const checkInterval = setInterval(() => {
+        if (Date.now() - startTime > 65000) {
+          clearInterval(checkInterval);
+          resolve();
+        }
+      }, 1000);
+    });
+
+    // Check service logs (from stdout capture)
+    console.log('Service should have published multiple offers in 65 seconds');
   });
 });

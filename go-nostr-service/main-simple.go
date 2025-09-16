@@ -156,8 +156,13 @@ func (s *TrustDiaryService) handleWebRTCAnswer(event *nostr.Event) {
 	// Check if this is from a trusted reader
 	name, trusted := s.trustedReaders[event.PubKey]
 	if !trusted {
-		log.Printf("⚠️ Answer from untrusted reader: %s", event.PubKey[:8])
-		return
+		// Check for wildcard trust (demo mode)
+		name, trusted = s.trustedReaders["*"]
+		if !trusted {
+			log.Printf("⚠️ Answer from untrusted reader: %s", event.PubKey[:8])
+			return
+		}
+		log.Printf("📝 Accepting answer from %s (wildcard trust)", event.PubKey[:8])
 	}
 
 	// Parse the answer

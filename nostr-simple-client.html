@@ -214,16 +214,18 @@
                 const { SimplePool } = window.NostrTools;
                 const pool = new SimplePool();
 
-                // Filter for offers from the service
+                // Filter for offers from the service - get recent ones
+                const since = Math.floor(Date.now() / 1000) - 60; // Last 60 seconds
                 const filter = {
                     authors: [serviceNostrPubkey],
                     kinds: [KIND_WEBRTC_OFFER],
+                    since: since,  // Only recent offers
                     limit: 5  // Get more offers
                 };
 
                 log(`Querying ${NOSTR_RELAYS.length} relays...`, 'info');
                 log(`Looking for offers from author: ${serviceNostrPubkey}`, 'info');
-                log(`Event kind: ${KIND_WEBRTC_OFFER}`, 'info');
+                log(`Getting offers from last 60 seconds`, 'info');
 
                 const sub = pool.sub(NOSTR_RELAYS, [filter]);
 
@@ -234,18 +236,36 @@
                     updateStatus('error');
                 }, 35000);  // Increased to 35s to ensure we catch at least one publication cycle
 
+                let latestOffer = null;
+                let latestTimestamp = 0;
+
                 sub.on('event', async (event) => {
-                    clearTimeout(timeout);
-                    log('📦 Found service offer!', 'success');
+                    log('📦 Found an offer!', 'info');
 
-                    try {
-                        processOffer(event);
-                    } catch (err) {
-                        log(`❌ Error processing offer: ${err.message}`, 'error');
+                    // Keep track of the latest offer
+                    if (event.created_at > latestTimestamp) {
+                        latestOffer = event;
+                        latestTimestamp = event.created_at;
                     }
-
-                    sub.unsub();
                 });
+
+                // After a short delay, process the latest offer
+                setTimeout(() => {
+                    clearTimeout(timeout);
+                    sub.unsub();
+
+                    if (latestOffer) {
+                        log(`📦 Processing newest offer (from ${new Date(latestTimestamp * 1000).toLocaleTimeString()})`, 'success');
+                        try {
+                            processOffer(latestOffer);
+                        } catch (err) {
+                            log(`❌ Error processing offer: ${err.message}`, 'error');
+                        }
+                    } else {
+                        log('No offers found', 'error');
+                        updateStatus('error');
+                    }
+                }, 3000);  // Wait 3 seconds to collect offers
 
             } catch (err) {
                 log(`Error: ${err.message}`, 'error');
