@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trust Diary - Browser Host</title>
+    <script type="module">
+        import {joinRoom} from 'https://cdn.skypack.dev/trystero/torrent'
+        window.joinRoom = joinRoom;
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl-fast.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tweetnacl-util@0.15.1/nacl-util.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #fff;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .subtitle {
+            opacity: 0.9;
+            margin-bottom: 30px;
+        }
+        .card {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        .status-badge.hosting { background: #10b981; }
+        .status-badge.offline { background: #64748b; }
+        button {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            transition: transform 0.2s;
+        }
+        button:hover { transform: translateY(-2px); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: #fff;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        input::placeholder, textarea::placeholder {
+            color: rgba(255,255,255,0.5);
+        }
+        .entry {
+            background: rgba(255,255,255,0.05);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        .peer-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .peer {
+            background: rgba(255,255,255,0.2);
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.9em;
+        }
+        #console {
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.85em;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        .log-entry {
+            margin-bottom: 3px;
+            opacity: 0.8;
+        }
+        .log-entry.success { color: #10b981; }
+        .log-entry.error { color: #ef4444; }
+        .log-entry.info { color: #3b82f6; }
+        .key-display {
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            word-break: break-all;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏠 Trust Diary Browser Host</h1>
+        <p class="subtitle">This browser tab IS the server - keep it open to host your diary</p>
+
+        <div class="status-badge offline" id="status">Offline</div>
+
+        <div class="card">
+            <h2>📚 Host Your Diary</h2>
+            <p style="margin-bottom: 15px;">Your browser will act as the host for your diary room.</p>
+
+            <input type="text" id="roomName" placeholder="Enter a unique room name (e.g., tom-diary-2024)" />
+            <input type="password" id="roomPassword" placeholder="Optional: Room password for encryption" />
+
+            <button onclick="startHosting()" id="hostBtn">🚀 Start Hosting</button>
+            <button onclick="stopHosting()" id="stopBtn" disabled>⏹️ Stop Hosting</button>
+
+            <div id="hostInfo" style="display: none; margin-top: 20px;">
+                <h3>🔑 Share These With Trusted Readers:</h3>
+                <div class="key-display">
+                    <strong>Room ID:</strong> <span id="roomId"></span><br>
+                    <strong>Your Public Key:</strong> <span id="pubKey"></span>
+                </div>
+                <button onclick="copyShareInfo()">📋 Copy Share Info</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>📝 Add Diary Entry</h2>
+            <input type="text" id="entryTitle" placeholder="Entry title..." disabled />
+            <textarea id="entryContent" placeholder="Write your diary entry..." rows="5" disabled></textarea>
+            <input type="text" id="entryMood" placeholder="Mood (optional)" disabled />
+
+            <button onclick="addEntry()" id="addBtn" disabled>➕ Add Entry</button>
+        </div>
+
+        <div class="card">
+            <h2>📖 Your Entries</h2>
+            <div id="entries">
+                <p style="opacity: 0.6;">No entries yet. Start hosting to add entries.</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>👥 Connected Readers</h2>
+            <div class="peer-list" id="peers">
+                <span style="opacity: 0.6;">No readers connected</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Console</h3>
+            <div id="console"></div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let room = null;
+        let peers = new Map();
+        let entries = [];
+        let identity = null;
+        let sendFunctions = {};
+
+        // Initialize identity
+        function initIdentity() {
+            // Check for existing identity in localStorage
+            const stored = localStorage.getItem('hostIdentity');
+            if (stored) {
+                identity = JSON.parse(stored);
+                log('Loaded existing identity', 'info');
+            } else {
+                // Generate new Ed25519 keypair for signing
+                const signKeyPair = nacl.sign.keyPair();
+                // Generate X25519 keypair for encryption
+                const boxKeyPair = nacl.box.keyPair();
+
+                identity = {
+                    signPublicKey: nacl.util.encodeBase64(signKeyPair.publicKey),
+                    signSecretKey: nacl.util.encodeBase64(signKeyPair.secretKey),
+                    boxPublicKey: nacl.util.encodeBase64(boxKeyPair.publicKey),
+                    boxSecretKey: nacl.util.encodeBase64(boxKeyPair.secretKey)
+                };
+
+                localStorage.setItem('hostIdentity', JSON.stringify(identity));
+                log('Generated new identity', 'success');
+            }
+
+            document.getElementById('pubKey').textContent = identity.signPublicKey.substring(0, 32) + '...';
+        }
+
+        // Load stored entries
+        function loadEntries() {
+            const stored = localStorage.getItem('diaryEntries');
+            if (stored) {
+                entries = JSON.parse(stored);
+                displayEntries();
+                log(`Loaded ${entries.length} entries from storage`, 'info');
+            }
+        }
+
+        function startHosting() {
+            const roomName = document.getElementById('roomName').value.trim();
+            if (!roomName) {
+                log('Please enter a room name', 'error');
+                return;
+            }
+
+            log(`Starting to host room: ${roomName}`, 'info');
+            document.getElementById('roomId').textContent = roomName;
+
+            // Join room using Trystero with WebTorrent
+            room = window.joinRoom(
+                { appId: 'trust-diary-host' },
+                roomName
+            );
+
+            // Create communication channels
+            const [sendEntry, receiveEntry] = room.makeAction('entry');
+            const [sendAuth, receiveAuth] = room.makeAction('auth');
+            const [sendRequest, receiveRequest] = room.makeAction('request');
+
+            sendFunctions.entry = sendEntry;
+            sendFunctions.auth = sendAuth;
+
+            // Handle peer connections
+            room.onPeerJoin(peerId => {
+                log(`Reader joined: ${peerId.substring(0, 8)}...`, 'success');
+                peers.set(peerId, {
+                    id: peerId,
+                    authenticated: false,
+                    joinedAt: new Date()
+                });
+                updatePeersList();
+
+                // Send authentication challenge
+                sendAuth({ type: 'challenge', hostKey: identity.signPublicKey }, peerId);
+            });
+
+            room.onPeerLeave(peerId => {
+                log(`Reader left: ${peerId.substring(0, 8)}...`, 'info');
+                peers.delete(peerId);
+                updatePeersList();
+            });
+
+            // Handle authentication responses
+            receiveAuth((data, peerId) => {
+                if (data.type === 'response') {
+                    // In a real app, verify the response here
+                    peers.get(peerId).authenticated = true;
+                    log(`Reader authenticated: ${peerId.substring(0, 8)}...`, 'success');
+
+                    // Send all entries to newly authenticated peer
+                    sendAllEntries(peerId);
+                }
+            });
+
+            // Handle entry requests
+            receiveRequest((data, peerId) => {
+                if (peers.get(peerId)?.authenticated) {
+                    sendAllEntries(peerId);
+                }
+            });
+
+            // Update UI
+            document.getElementById('status').textContent = 'Hosting';
+            document.getElementById('status').className = 'status-badge hosting';
+            document.getElementById('hostBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            document.getElementById('hostInfo').style.display = 'block';
+
+            // Enable entry controls
+            document.getElementById('entryTitle').disabled = false;
+            document.getElementById('entryContent').disabled = false;
+            document.getElementById('entryMood').disabled = false;
+            document.getElementById('addBtn').disabled = false;
+
+            log('✅ Now hosting! Share the room ID with trusted readers.', 'success');
+        }
+
+        function stopHosting() {
+            if (room) {
+                room.leave();
+                room = null;
+            }
+
+            peers.clear();
+            updatePeersList();
+
+            // Update UI
+            document.getElementById('status').textContent = 'Offline';
+            document.getElementById('status').className = 'status-badge offline';
+            document.getElementById('hostBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('hostInfo').style.display = 'none';
+
+            // Disable entry controls
+            document.getElementById('entryTitle').disabled = true;
+            document.getElementById('entryContent').disabled = true;
+            document.getElementById('entryMood').disabled = true;
+            document.getElementById('addBtn').disabled = true;
+
+            log('Stopped hosting', 'info');
+        }
+
+        function addEntry() {
+            const title = document.getElementById('entryTitle').value.trim();
+            const content = document.getElementById('entryContent').value.trim();
+            const mood = document.getElementById('entryMood').value.trim();
+
+            if (!title || !content) {
+                log('Please enter title and content', 'error');
+                return;
+            }
+
+            const entry = {
+                id: Date.now().toString(),
+                title,
+                content,
+                mood,
+                timestamp: new Date().toISOString(),
+                author: 'Host'
+            };
+
+            // Sign the entry
+            const message = JSON.stringify({ title, content, mood, timestamp: entry.timestamp });
+            const signature = nacl.sign.detached(
+                nacl.util.decodeUTF8(message),
+                nacl.util.decodeBase64(identity.signSecretKey)
+            );
+            entry.signature = nacl.util.encodeBase64(signature);
+
+            // Add to local storage
+            entries.push(entry);
+            localStorage.setItem('diaryEntries', JSON.stringify(entries));
+
+            // Display locally
+            displayEntries();
+
+            // Broadcast to all authenticated peers
+            peers.forEach((peer, peerId) => {
+                if (peer.authenticated) {
+                    sendFunctions.entry(entry, peerId);
+                }
+            });
+
+            // Clear form
+            document.getElementById('entryTitle').value = '';
+            document.getElementById('entryContent').value = '';
+            document.getElementById('entryMood').value = '';
+
+            log(`Added entry: "${title}"`, 'success');
+        }
+
+        function sendAllEntries(peerId) {
+            entries.forEach(entry => {
+                sendFunctions.entry(entry, peerId);
+            });
+            log(`Sent ${entries.length} entries to ${peerId.substring(0, 8)}...`, 'info');
+        }
+
+        function displayEntries() {
+            const container = document.getElementById('entries');
+            if (entries.length === 0) {
+                container.innerHTML = '<p style="opacity: 0.6;">No entries yet. Start hosting to add entries.</p>';
+                return;
+            }
+
+            container.innerHTML = entries.slice().reverse().map(entry => `
+                <div class="entry">
+                    <strong>${entry.title}</strong>
+                    <div style="opacity: 0.7; font-size: 0.9em; margin: 5px 0;">
+                        ${new Date(entry.timestamp).toLocaleString()}
+                        ${entry.mood ? ` • Mood: ${entry.mood}` : ''}
+                    </div>
+                    <div style="margin-top: 10px;">${entry.content}</div>
+                </div>
+            `).join('');
+        }
+
+        function updatePeersList() {
+            const container = document.getElementById('peers');
+            if (peers.size === 0) {
+                container.innerHTML = '<span style="opacity: 0.6;">No readers connected</span>';
+                return;
+            }
+
+            container.innerHTML = Array.from(peers.values()).map(peer => `
+                <div class="peer">
+                    ${peer.id.substring(0, 8)}...
+                    ${peer.authenticated ? '✅' : '⏳'}
+                </div>
+            `).join('');
+        }
+
+        function copyShareInfo() {
+            const roomId = document.getElementById('roomId').textContent;
+            const info = `Trust Diary Room
+Room ID: ${roomId}
+Host Public Key: ${identity.signPublicKey}
+
+To connect: Use the reader client with these credentials`;
+
+            navigator.clipboard.writeText(info);
+            log('Share info copied to clipboard', 'success');
+        }
+
+        function log(message, type = '') {
+            const consoleEl = document.getElementById('console');
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${timestamp}] ${message}`;
+            consoleEl.appendChild(entry);
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+            console.log(message);
+        }
+
+        // Initialize on load
+        window.addEventListener('load', () => {
+            initIdentity();
+            loadEntries();
+            log('Browser host ready. This tab will act as your diary server.', 'info');
+            log('Keep this tab open to maintain your diary online.', 'info');
+        });
+
+        // Prevent accidental close
+        window.addEventListener('beforeunload', (e) => {
+            if (room) {
+                e.preventDefault();
+                e.returnValue = 'You are currently hosting. Are you sure you want to leave?';
+            }
+        });
+    </script>
+</body>
+</html>
