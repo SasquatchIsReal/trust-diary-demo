@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Nostr Discovery Test</title>
+    <script src="https://unpkg.com/nostr-tools@1.17.0/lib/nostr.bundle.js"></script>
+</head>
+<body>
+    <h1>Testing Nostr Discovery</h1>
+    <div id="log" style="white-space: pre-wrap; font-family: monospace; background: #f0f0f0; padding: 20px;"></div>
+
+    <script>
+        const SERVICE_NOSTR_PUBKEY = '57cafe5a87555d0271c2fb995f58e05ba80896ea81b5ca0b6e602bbcdb2cc0da';
+
+        const NOSTR_RELAYS = [
+            'wss://relay.damus.io',
+            'wss://relay.nostr.band',
+            'wss://nos.lol',
+            'wss://relay.primal.net'
+        ];
+
+        function log(msg) {
+            document.getElementById('log').textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+        }
+
+        async function testNostrDiscovery() {
+            log('Starting Nostr discovery test...');
+
+            const { SimplePool } = window.NostrTools;
+            const pool = new SimplePool();
+
+            log(`Looking for offers from: ${SERVICE_NOSTR_PUBKEY}`);
+
+            const filter = {
+                authors: [SERVICE_NOSTR_PUBKEY],
+                kinds: [21000],
+                limit: 5
+            };
+
+            try {
+                const sub = pool.sub(NOSTR_RELAYS, [filter]);
+
+                const timeout = setTimeout(() => {
+                    sub.unsub();
+                    log('❌ Timeout - no events found');
+                }, 15000);
+
+                sub.on('event', (event) => {
+                    clearTimeout(timeout);
+                    log('✅ Found event!');
+                    log(`Event ID: ${event.id}`);
+                    log(`Created: ${new Date(event.created_at * 1000).toLocaleString()}`);
+                    log(`Content: ${event.content.substring(0, 100)}...`);
+
+                    try {
+                        const offer = JSON.parse(event.content);
+                        log(`✅ Parsed offer! ID: ${offer.offerId}`);
+                        log(`SDP length: ${offer.sdp?.length || 0} chars`);
+                    } catch (err) {
+                        log(`❌ Error parsing: ${err.message}`);
+                    }
+
+                    sub.unsub();
+                });
+
+                sub.on('eose', () => {
+                    log('End of stored events from relay');
+                });
+
+            } catch (err) {
+                log(`❌ Error: ${err.message}`);
+            }
+        }
+
+        // Start test
+        testNostrDiscovery();
+    </script>
+</body>
+</html>

@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Trust Diary - Go Service Reader</title>
+    <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl-fast.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tweetnacl-util@0.15.1/nacl-util.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 15px;
+        }
+
+        .info-box {
+            background: #f0f4ff;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+
+        .info-box h3 {
+            margin-top: 0;
+            color: #667eea;
+        }
+
+        .section {
+            margin: 25px 0;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+        }
+
+        .key-display {
+            font-family: monospace;
+            font-size: 13px;
+            padding: 12px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            margin: 10px 0;
+            word-break: break-all;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-right: 10px;
+            font-weight: 600;
+        }
+
+        button:hover {
+            background: #5a67d8;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            margin: 10px 0;
+        }
+
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.connecting {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status.authenticated {
+            background: #cce5ff;
+            color: #004085;
+        }
+
+        .entry {
+            padding: 15px;
+            margin: 10px 0;
+            background: white;
+            border-left: 3px solid #667eea;
+            border-radius: 6px;
+        }
+
+        .entry-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .log {
+            height: 150px;
+            overflow-y: auto;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .highlight {
+            background: #fffacd;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Trust Diary - Go Service Reader</h1>
+
+        <div class="info-box">
+            <h3>✨ This HTML file can run from anywhere!</h3>
+            <ul>
+                <li>✅ Load directly from <span class="highlight">file://</span> URL</li>
+                <li>✅ Run from USB stick</li>
+                <li>✅ Open from email attachment</li>
+                <li>✅ Host on any static server</li>
+                <li>✅ No local server required!</li>
+            </ul>
+            <p><strong>How it works:</strong> Uses WebRTC to connect directly to the Go service. All crypto libraries load from CDN, so this single HTML file is completely portable!</p>
+        </div>
+
+        <div class="section">
+            <h3>My Identity</h3>
+            <div class="key-display">
+                <strong>Public Key:</strong> <span id="publicKey">Generating...</span>
+            </div>
+            <div class="key-display">
+                <strong>Encryption Key:</strong> <span id="boxPublicKey">Generating...</span>
+            </div>
+            <button onclick="copyMyIdentity()">Copy My Identity</button>
+            <small style="color: #666;">Send these to the service admin to get trusted</small>
+        </div>
+
+        <div class="section">
+            <h3>Connect to Go Service</h3>
+            <input type="text" id="serviceURL" placeholder="Service URL (e.g., http://localhost:3333)" value="http://localhost:3333">
+            <button onclick="connectToService()">Connect via WebRTC</button>
+            <button onclick="disconnect()">Disconnect</button>
+
+            <div style="margin-top: 15px;">
+                <div>Status: <span class="status disconnected" id="status">Not Connected</span></div>
+                <div>WebRTC State: <span id="rtcState">-</span></div>
+                <div>Authentication: <span id="authStatus">-</span></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>📝 Service Entries</h3>
+            <div id="entries">
+                <div style="color: #999;">Connect to service to see entries</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Log</h3>
+            <div class="log" id="log"></div>
+        </div>
+    </div>
+
+    <script>
+        // Reader state
+        let readerKeyPair = null;
+        let readerBoxKeyPair = null;
+        let peerConnection = null;
+        let dataChannel = null;
+        let wsConnection = null;
+        let entries = [];
+        let authenticated = false;
+
+        function log(msg) {
+            const logDiv = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            logDiv.innerHTML = `[${time}] ${msg}\n` + logDiv.innerHTML;
+        }
+
+        function generateIdentity() {
+            readerKeyPair = nacl.sign.keyPair();
+            readerBoxKeyPair = nacl.box.keyPair();
+
+            const publicKeyStr = nacl.util.encodeBase64(readerKeyPair.publicKey);
+            const boxPublicKeyStr = nacl.util.encodeBase64(readerBoxKeyPair.publicKey);
+
+            document.getElementById('publicKey').textContent = publicKeyStr;
+            document.getElementById('boxPublicKey').textContent = boxPublicKeyStr;
+
+            // Store in localStorage
+            localStorage.setItem('goReaderIdentity', JSON.stringify({
+                publicKey: publicKeyStr,
+                secretKey: nacl.util.encodeBase64(readerKeyPair.secretKey),
+                boxPublicKey: boxPublicKeyStr,
+                boxSecretKey: nacl.util.encodeBase64(readerBoxKeyPair.secretKey)
+            }));
+
+            log('Identity generated');
+        }
+
+        function loadOrGenerateIdentity() {
+            const stored = localStorage.getItem('goReaderIdentity');
+            if (stored) {
+                const identity = JSON.parse(stored);
+                readerKeyPair = {
+                    publicKey: nacl.util.decodeBase64(identity.publicKey),
+                    secretKey: nacl.util.decodeBase64(identity.secretKey)
+                };
+                readerBoxKeyPair = {
+                    publicKey: nacl.util.decodeBase64(identity.boxPublicKey),
+                    secretKey: nacl.util.decodeBase64(identity.boxSecretKey)
+                };
+
+                document.getElementById('publicKey').textContent = identity.publicKey;
+                document.getElementById('boxPublicKey').textContent = identity.boxPublicKey;
+
+                log('Identity loaded from localStorage');
+            } else {
+                generateIdentity();
+            }
+        }
+
+        window.copyMyIdentity = function() {
+            const text = `Reader Identity:\nName: [Your Name]\nPublic Key: ${nacl.util.encodeBase64(readerKeyPair.publicKey)}\nEncryption Key: ${nacl.util.encodeBase64(readerBoxKeyPair.publicKey)}`;
+            navigator.clipboard.writeText(text).then(() => {
+                log('Identity copied to clipboard');
+            }).catch(() => {
+                alert(text);
+            });
+        }
+
+        window.connectToService = async function() {
+            const serviceURL = document.getElementById('serviceURL').value;
+            if (!serviceURL) {
+                log('Enter service URL');
+                return;
+            }
+
+            log('Connecting to Go service via WebRTC...');
+            document.getElementById('status').textContent = 'Connecting...';
+            document.getElementById('status').className = 'status connecting';
+
+            // Create WebRTC peer connection
+            const config = {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' }
+                ]
+            };
+
+            peerConnection = new RTCPeerConnection(config);
+
+            // Monitor connection state
+            peerConnection.onconnectionstatechange = () => {
+                document.getElementById('rtcState').textContent = peerConnection.connectionState;
+                log(`WebRTC state: ${peerConnection.connectionState}`);
+
+                if (peerConnection.connectionState === 'connected') {
+                    document.getElementById('status').textContent = 'Connected';
+                    document.getElementById('status').className = 'status connected';
+                }
+            };
+
+            // Create data channel
+            dataChannel = peerConnection.createDataChannel('trust-diary', {
+                ordered: true
+            });
+
+            dataChannel.onopen = () => {
+                log('Data channel opened');
+                document.getElementById('authStatus').textContent = 'Awaiting challenge...';
+            };
+
+            dataChannel.onmessage = (event) => {
+                handleDataChannelMessage(event.data);
+            };
+
+            dataChannel.onclose = () => {
+                log('Data channel closed');
+                document.getElementById('status').textContent = 'Disconnected';
+                document.getElementById('status').className = 'status disconnected';
+            };
+
+            // Handle ICE candidates
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate && wsConnection) {
+                    wsConnection.send(JSON.stringify({
+                        type: 'candidate',
+                        candidate: event.candidate
+                    }));
+                }
+            };
+
+            // Create offer
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+
+            // Connect to signaling server
+            const wsURL = serviceURL.replace('http://', 'ws://').replace('https://', 'wss://') + '/ws/signal';
+            wsConnection = new WebSocket(wsURL);
+
+            wsConnection.onopen = () => {
+                log('WebSocket connected for signaling');
+                // Send offer
+                wsConnection.send(JSON.stringify({
+                    type: 'offer',
+                    sdp: offer.sdp
+                }));
+            };
+
+            wsConnection.onmessage = async (event) => {
+                const msg = JSON.parse(event.data);
+
+                if (msg.type === 'answer') {
+                    const answer = new RTCSessionDescription({
+                        type: 'answer',
+                        sdp: msg.sdp
+                    });
+                    await peerConnection.setRemoteDescription(answer);
+                    log('Received answer from service');
+                } else if (msg.type === 'candidate' && msg.candidate) {
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate));
+                }
+            };
+
+            wsConnection.onerror = (error) => {
+                log(`WebSocket error: ${error}`);
+                document.getElementById('status').textContent = 'Connection Failed';
+                document.getElementById('status').className = 'status disconnected';
+            };
+        }
+
+        function handleDataChannelMessage(data) {
+            try {
+                const msg = JSON.parse(data);
+
+                switch (msg.type) {
+                    case 'challenge':
+                        handleAuthChallenge(msg);
+                        break;
+                    case 'entry':
+                        handleEntry(msg.entry);
+                        break;
+                    default:
+                        log(`Unknown message type: ${msg.type}`);
+                }
+            } catch (err) {
+                log(`Error parsing message: ${err}`);
+            }
+        }
+
+        function handleAuthChallenge(msg) {
+            log('Received authentication challenge');
+
+            // Decode challenge
+            const challenge = nacl.util.decodeBase64(msg.challenge);
+
+            // Sign challenge with our private key
+            const signature = nacl.sign.detached(challenge, readerKeyPair.secretKey);
+
+            // Send response
+            const response = {
+                type: 'response',
+                signature: nacl.util.encodeBase64(signature),
+                publicKey: nacl.util.encodeBase64(readerKeyPair.publicKey),
+                boxPublicKey: nacl.util.encodeBase64(readerBoxKeyPair.publicKey)
+            };
+
+            dataChannel.send(JSON.stringify(response));
+            log('Sent authentication response');
+            document.getElementById('authStatus').textContent = 'Response sent...';
+        }
+
+        function handleEntry(entry) {
+            if (!authenticated) {
+                authenticated = true;
+                document.getElementById('authStatus').textContent = '✅ Authenticated';
+                document.getElementById('status').className = 'status authenticated';
+                log('Authentication successful!');
+
+                // Request all entries
+                dataChannel.send(JSON.stringify({ type: 'request' }));
+            }
+
+            // Add or update entry
+            const existing = entries.findIndex(e => e.id === entry.id);
+            if (existing >= 0) {
+                entries[existing] = entry;
+            } else {
+                entries.push(entry);
+            }
+
+            entries.sort((a, b) => b.timestamp - a.timestamp);
+            displayEntries();
+        }
+
+        function displayEntries() {
+            const div = document.getElementById('entries');
+            if (entries.length === 0) {
+                div.innerHTML = '<div style="color: #999;">No entries yet</div>';
+            } else {
+                div.innerHTML = entries.map(e => `
+                    <div class="entry">
+                        <div class="entry-header">
+                            <strong>${e.author || e.Author}</strong>
+                            <span>${new Date(e.timestamp || e.Timestamp).toLocaleString()}</span>
+                        </div>
+                        <div>${e.content || e.Content}</div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        window.disconnect = function() {
+            if (dataChannel) {
+                dataChannel.close();
+            }
+            if (peerConnection) {
+                peerConnection.close();
+            }
+            if (wsConnection) {
+                wsConnection.close();
+            }
+
+            document.getElementById('status').textContent = 'Disconnected';
+            document.getElementById('status').className = 'status disconnected';
+            document.getElementById('rtcState').textContent = '-';
+            document.getElementById('authStatus').textContent = '-';
+            authenticated = false;
+
+            log('Disconnected from service');
+        }
+
+        // Initialize
+        loadOrGenerateIdentity();
+        log('Ready - Get service admin to trust you first');
+        log('This file is running from: ' + window.location.protocol);
+    </script>
+</body>
+</html>

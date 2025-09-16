@@ -1,0 +1,39 @@
+{
+  "name": "trust-diary-demo",
+  "version": "1.0.0",
+  "description": "Trust-gated P2P diary with WebRTC and Web of Trust",
+  "type": "module",
+  "scripts": {
+    "start": "http-server client -p 3000 -c-1 --cors",
+    "serve": "http-server client -p 3000 -c-1 --cors",
+    "dev": "npm-run-all --parallel serve open",
+    "open": "open http://localhost:3000/tom-jsbin.html && open http://localhost:3000/bob-jsbin.html",
+    "service": "node service/trust-diary-service.js",
+    "service:dev": "nodemon service/trust-diary-service.js",
+    "admin": "open http://localhost:3333",
+    "reader": "open client/service-reader.html",
+    "test": "npm run test:p2p",
+    "test:p2p": "playwright test tests/pure-p2p.spec.ts",
+    "test:all": "playwright test",
+    "test:docker": "docker-compose -f docker-compose.test.yml up --abort-on-container-exit --exit-code-from p2p-test-runner",
+    "test:ci": "npm run test:docker"
+  },
+  "dependencies": {
+    "@roamhq/wrtc": "^0.9.1",
+    "bittorrent-dht": "^11.0.11",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "simple-peer": "^9.11.1",
+    "trystero": "^0.18.0",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "http-server": "^14.1.1",
+    "nodemon": "^3.1.10",
+    "npm-run-all": "^4.1.5",
+    "playwright": "^1.40.0"
+  }
+}

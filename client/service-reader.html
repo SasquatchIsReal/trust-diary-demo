@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Trust Diary - Service Reader</title>
+    <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl-fast.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tweetnacl-util@0.15.1/nacl-util.min.js"></script>
+    <script type="module">
+        import {joinRoom} from 'https://cdn.skypack.dev/trystero/torrent'
+        window.joinRoom = joinRoom;
+    </script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 15px;
+        }
+
+        .section {
+            margin: 25px 0;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+        }
+
+        h3 {
+            margin-top: 0;
+            color: #555;
+        }
+
+        .key-display {
+            font-family: monospace;
+            font-size: 13px;
+            padding: 12px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            margin: 10px 0;
+            word-break: break-all;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-right: 10px;
+            font-weight: 600;
+        }
+
+        button:hover {
+            background: #5a67d8;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            margin: 10px 0;
+        }
+
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.connecting {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status.authenticated {
+            background: #cce5ff;
+            color: #004085;
+        }
+
+        .entry {
+            padding: 15px;
+            margin: 10px 0;
+            background: white;
+            border-left: 3px solid #667eea;
+            border-radius: 6px;
+        }
+
+        .entry-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .log {
+            height: 150px;
+            overflow-y: auto;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .instructions {
+            background: #e3f2fd;
+            border: 1px solid #90caf9;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .instructions h4 {
+            margin-top: 0;
+            color: #1565c0;
+        }
+
+        .instructions ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+
+        .instructions li {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Trust Diary Service Reader</h1>
+
+        <div class="instructions">
+            <h4>How to Connect:</h4>
+            <ol>
+                <li>Get the service owner to trust your public keys below</li>
+                <li>Get the service's public keys from the admin</li>
+                <li>Enter them below and click "Connect to Service"</li>
+                <li>The service will authenticate you automatically</li>
+            </ol>
+        </div>
+
+        <div class="section">
+            <h3>My Identity</h3>
+            <div class="key-display">
+                <strong>Public Key:</strong> <span id="publicKey">Generating...</span>
+            </div>
+            <div class="key-display">
+                <strong>Encryption Key:</strong> <span id="boxPublicKey">Generating...</span>
+            </div>
+            <button onclick="copyMyIdentity()">Copy My Identity</button>
+            <small style="color: #666;">Send these to the service admin to get trusted</small>
+        </div>
+
+        <div class="section">
+            <h3>Connect to Service</h3>
+            <input type="text" id="servicePublicKey" placeholder="Service's Public Key">
+            <input type="text" id="serviceBoxPublicKey" placeholder="Service's Encryption Key">
+            <input type="text" id="roomSalt" placeholder="Room Salt (optional, default: trust-diary-v1)" value="trust-diary-v1">
+            <button onclick="connectToService()">Connect to Service</button>
+            <button onclick="disconnect()">Disconnect</button>
+
+            <div style="margin-top: 15px;">
+                <div>Status: <span class="status disconnected" id="status">Not Connected</span></div>
+                <div>Room: <span id="roomId">-</span></div>
+                <div>Authentication: <span id="authStatus">-</span></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>📝 Service Entries</h3>
+            <div id="entries">
+                <div style="color: #999;">Connect to service to see entries</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Log</h3>
+            <div class="log" id="log"></div>
+        </div>
+    </div>
+
+    <script>
+        // Reader state
+        let readerKeyPair = null;
+        let readerBoxKeyPair = null;
+        let serviceInfo = null;
+        let dhtRoom = null;
+        let entries = [];
+        let authenticated = false;
+
+        function log(msg) {
+            const logDiv = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            logDiv.innerHTML = `[${time}] ${msg}\n` + logDiv.innerHTML;
+        }
+
+        function generateIdentity() {
+            readerKeyPair = nacl.sign.keyPair();
+            readerBoxKeyPair = nacl.box.keyPair();
+
+            const publicKeyStr = nacl.util.encodeBase64(readerKeyPair.publicKey);
+            const boxPublicKeyStr = nacl.util.encodeBase64(readerBoxKeyPair.publicKey);
+
+            document.getElementById('publicKey').textContent = publicKeyStr;
+            document.getElementById('boxPublicKey').textContent = boxPublicKeyStr;
+
+            // Store in localStorage
+            localStorage.setItem('readerIdentity', JSON.stringify({
+                publicKey: publicKeyStr,
+                secretKey: nacl.util.encodeBase64(readerKeyPair.secretKey),
+                boxPublicKey: boxPublicKeyStr,
+                boxSecretKey: nacl.util.encodeBase64(readerBoxKeyPair.secretKey)
+            }));
+
+            log('Identity generated');
+        }
+
+        function loadOrGenerateIdentity() {
+            const stored = localStorage.getItem('readerIdentity');
+            if (stored) {
+                const identity = JSON.parse(stored);
+                readerKeyPair = {
+                    publicKey: nacl.util.decodeBase64(identity.publicKey),
+                    secretKey: nacl.util.decodeBase64(identity.secretKey)
+                };
+                readerBoxKeyPair = {
+                    publicKey: nacl.util.decodeBase64(identity.boxPublicKey),
+                    secretKey: nacl.util.decodeBase64(identity.boxSecretKey)
+                };
+
+                document.getElementById('publicKey').textContent = identity.publicKey;
+                document.getElementById('boxPublicKey').textContent = identity.boxPublicKey;
+
+                log('Identity loaded');
+            } else {
+                generateIdentity();
+            }
+        }
+
+        window.copyMyIdentity = function() {
+            const text = `Reader Identity:\nPublic Key: ${nacl.util.encodeBase64(readerKeyPair.publicKey)}\nEncryption Key: ${nacl.util.encodeBase64(readerBoxKeyPair.publicKey)}`;
+            navigator.clipboard.writeText(text).then(() => {
+                log('Identity copied to clipboard');
+            }).catch(() => {
+                alert(text);
+            });
+        }
+
+        function generateRoomId(servicePublicKey, roomSalt) {
+            const material = `${roomSalt}:${servicePublicKey}`;
+            const hash = nacl.hash(nacl.util.decodeUTF8(material));
+            return nacl.util.encodeBase64(hash).substring(0, 20);
+        }
+
+        function decryptFromService(encrypted, serviceBoxPublicKey) {
+            try {
+                const nonce = nacl.util.decodeBase64(encrypted.nonce);
+                const ciphertext = nacl.util.decodeBase64(encrypted.encrypted);
+                const decrypted = nacl.box.open(
+                    ciphertext,
+                    nonce,
+                    nacl.util.decodeBase64(serviceBoxPublicKey),
+                    readerBoxKeyPair.secretKey
+                );
+                if (decrypted) {
+                    return JSON.parse(nacl.util.encodeUTF8(decrypted));
+                }
+            } catch (e) {
+                return null;
+            }
+        }
+
+        window.connectToService = function() {
+            const servicePublicKey = document.getElementById('servicePublicKey').value;
+            const serviceBoxPublicKey = document.getElementById('serviceBoxPublicKey').value;
+            const roomSalt = document.getElementById('roomSalt').value || 'trust-diary-v1';
+
+            if (!servicePublicKey || !serviceBoxPublicKey) {
+                log('Enter service keys');
+                return;
+            }
+
+            if (dhtRoom) {
+                log('Already connected');
+                return;
+            }
+
+            serviceInfo = { publicKey: servicePublicKey, boxPublicKey: serviceBoxPublicKey };
+
+            const roomId = generateRoomId(servicePublicKey, roomSalt);
+
+            log(`Connecting to room: ${roomId}`);
+            document.getElementById('roomId').textContent = roomId;
+            document.getElementById('status').textContent = 'Connecting...';
+            document.getElementById('status').className = 'status connecting';
+
+            dhtRoom = window.joinRoom(
+                { appId: 'trust-diary-service', password: roomId },
+                roomId
+            );
+
+            dhtRoom.onPeerJoin(peerId => {
+                log(`Connected to service: ${peerId.substring(0, 8)}...`);
+                document.getElementById('status').textContent = 'Connected';
+                document.getElementById('status').className = 'status connected';
+                document.getElementById('authStatus').textContent = 'Authenticating...';
+            });
+
+            dhtRoom.onPeerLeave(peerId => {
+                log(`Service disconnected: ${peerId.substring(0, 8)}...`);
+                document.getElementById('status').textContent = 'Service Disconnected';
+                document.getElementById('status').className = 'status disconnected';
+                document.getElementById('authStatus').textContent = '-';
+                authenticated = false;
+            });
+
+            // Set up authenticated channels (max 12 bytes for action names)
+            const [sendChallenge, getChallenge] = dhtRoom.makeAction('challenge');
+            const [sendResponse, getResponse] = dhtRoom.makeAction('response');
+            const [, getEntry] = dhtRoom.makeAction('entry');
+            const [, getAnnouncement] = dhtRoom.makeAction('announce');
+
+            // Handle authentication challenge from service
+            getChallenge((data, peerId) => {
+                log('Received authentication challenge');
+
+                // Sign the challenge
+                const challenge = nacl.util.decodeBase64(data.challenge);
+                const signature = nacl.sign.detached(challenge, readerKeyPair.secretKey);
+
+                // Send response
+                sendResponse({
+                    signature: nacl.util.encodeBase64(signature),
+                    publicKey: nacl.util.encodeBase64(readerKeyPair.publicKey),
+                    boxPublicKey: nacl.util.encodeBase64(readerBoxKeyPair.publicKey)
+                });
+
+                log('Sent authentication response');
+            });
+
+            // Handle encrypted entries
+            getEntry((encrypted, peerId) => {
+                const entry = decryptFromService(encrypted, serviceBoxPublicKey);
+                if (entry) {
+                    log(`Received entry: "${entry.content.substring(0, 30)}..."`);
+
+                    // Add or update entry
+                    const existing = entries.findIndex(e => e.id === entry.id);
+                    if (existing >= 0) {
+                        entries[existing] = entry;
+                    } else {
+                        entries.push(entry);
+                    }
+
+                    entries.sort((a, b) => b.timestamp - a.timestamp);
+                    displayEntries();
+
+                    if (!authenticated) {
+                        authenticated = true;
+                        document.getElementById('authStatus').textContent = '✅ Authenticated';
+                        document.getElementById('status').className = 'status authenticated';
+                    }
+                }
+            });
+
+            // Handle announcements
+            getAnnouncement((encrypted, peerId) => {
+                const announcement = decryptFromService(encrypted, serviceBoxPublicKey);
+                if (announcement) {
+                    log(`Service announcement: ${announcement.type}`);
+                }
+            });
+        }
+
+        window.disconnect = function() {
+            if (dhtRoom) {
+                dhtRoom.leave();
+                dhtRoom = null;
+                document.getElementById('roomId').textContent = '-';
+                document.getElementById('status').textContent = 'Disconnected';
+                document.getElementById('status').className = 'status disconnected';
+                document.getElementById('authStatus').textContent = '-';
+                authenticated = false;
+                log('Disconnected from service');
+            }
+        }
+
+        function displayEntries() {
+            const div = document.getElementById('entries');
+            if (entries.length === 0) {
+                div.innerHTML = '<div style="color: #999;">No entries yet</div>';
+            } else {
+                div.innerHTML = entries.map(e => `
+                    <div class="entry">
+                        <div class="entry-header">
+                            <strong>${e.author}</strong>
+                            <span>${new Date(e.timestamp).toLocaleString()}</span>
+                        </div>
+                        <div>${e.content}</div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        // Initialize
+        loadOrGenerateIdentity();
+        log('Ready - Get service admin to trust you first');
+    </script>
+</body>
+</html>

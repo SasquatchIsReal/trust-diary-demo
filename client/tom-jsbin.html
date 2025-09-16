@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tom's Trust Diary (P2P)</title>
+    <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl-fast.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tweetnacl-util@0.15.1/nacl-util.min.js"></script>
+    <script type="module">
+        import {joinRoom} from 'https://cdn.skypack.dev/trystero/torrent'
+        window.joinRoom = joinRoom;
+    </script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #fff;
+            color: #333;
+        }
+        h1 { border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .section {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 20px;
+            margin: 20px 0;
+            background: #fafafa;
+        }
+        h3 { margin-top: 0; color: #555; }
+        input, textarea {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #007aff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover { background: #0051a8; }
+        .key {
+            font-family: monospace;
+            font-size: 13px;
+            padding: 10px;
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 10px 0;
+            word-break: break-all;
+        }
+        .entry {
+            padding: 15px;
+            margin: 10px 0;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+        }
+        .trusted-item {
+            padding: 10px;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .log {
+            height: 150px;
+            overflow-y: auto;
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Tom's Trust Diary (P2P)</h1>
+
+    <div class="section">
+        <h3>My Identity</h3>
+        <div class="key">
+            <strong>Public Key:</strong> <span id="publicKey">Generating...</span>
+        </div>
+        <div class="key">
+            <strong>Encryption Key:</strong> <span id="boxPublicKey">Generating...</span>
+        </div>
+        <button onclick="copyMyIdentity()">Copy My Identity</button>
+    </div>
+
+    <div class="section">
+        <h3>Trust Bob</h3>
+        <input type="text" id="bobPublicKey" placeholder="Bob's Public Key">
+        <input type="text" id="bobBoxPublicKey" placeholder="Bob's Encryption Key">
+        <button onclick="trustBob()">Trust Bob</button>
+
+        <div id="trustedList" style="margin-top: 20px;"></div>
+    </div>
+
+    <div class="section">
+        <h3>Diary Entries</h3>
+        <textarea id="newEntry" rows="3" placeholder="Write entry..."></textarea>
+        <button onclick="addEntry()">Add Entry</button>
+        <div id="entries"></div>
+    </div>
+
+    <div class="section">
+        <h3>P2P Status</h3>
+        <div>Room: <span id="roomStatus">Not connected</span></div>
+        <div>Peers: <span id="peerCount">0</span></div>
+        <button onclick="startP2P()">Start P2P</button>
+        <button onclick="stopP2P()">Stop P2P</button>
+    </div>
+
+    <div class="section">
+        <h3>Log</h3>
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+        // Tom's state
+        let tomKeyPair = null;
+        let tomBoxKeyPair = null;
+        let trustedKeys = new Map();
+        let entries = [];
+        let dhtRoom = null;
+        let sendEntry = null;
+        let sendAnnouncement = null;
+
+        function log(msg) {
+            const logDiv = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            logDiv.innerHTML = `[${time}] ${msg}\n` + logDiv.innerHTML;
+        }
+
+        function generateIdentity() {
+            tomKeyPair = nacl.sign.keyPair();
+            tomBoxKeyPair = nacl.box.keyPair();
+
+            const publicKeyStr = nacl.util.encodeBase64(tomKeyPair.publicKey);
+            const boxPublicKeyStr = nacl.util.encodeBase64(tomBoxKeyPair.publicKey);
+
+            document.getElementById('publicKey').textContent = publicKeyStr.substring(0, 32) + '...';
+            document.getElementById('boxPublicKey').textContent = boxPublicKeyStr.substring(0, 32) + '...';
+
+            // Store in localStorage
+            localStorage.setItem('tomIdentity', JSON.stringify({
+                publicKey: publicKeyStr,
+                secretKey: nacl.util.encodeBase64(tomKeyPair.secretKey),
+                boxPublicKey: boxPublicKeyStr,
+                boxSecretKey: nacl.util.encodeBase64(tomBoxKeyPair.secretKey)
+            }));
+
+            // Load saved entries
+            const savedEntries = localStorage.getItem('tomEntries');
+            if (savedEntries) {
+                entries = JSON.parse(savedEntries);
+                displayEntries();
+            } else {
+                entries = [{
+                    id: 1,
+                    content: "Started my P2P trust diary",
+                    timestamp: Date.now(),
+                    author: "Tom"
+                }];
+                saveEntries();
+                displayEntries();
+            }
+
+            // Load trusted keys
+            const savedTrusted = localStorage.getItem('tomTrusted');
+            if (savedTrusted) {
+                trustedKeys = new Map(JSON.parse(savedTrusted));
+                displayTrusted();
+            }
+
+            log('Identity loaded');
+        }
+
+        function loadOrGenerateIdentity() {
+            const stored = localStorage.getItem('tomIdentity');
+            if (stored) {
+                const identity = JSON.parse(stored);
+                tomKeyPair = {
+                    publicKey: nacl.util.decodeBase64(identity.publicKey),
+                    secretKey: nacl.util.decodeBase64(identity.secretKey)
+                };
+                tomBoxKeyPair = {
+                    publicKey: nacl.util.decodeBase64(identity.boxPublicKey),
+                    secretKey: nacl.util.decodeBase64(identity.boxSecretKey)
+                };
+
+                document.getElementById('publicKey').textContent = identity.publicKey.substring(0, 32) + '...';
+                document.getElementById('boxPublicKey').textContent = identity.boxPublicKey.substring(0, 32) + '...';
+
+                // Load entries and trusted
+                const savedEntries = localStorage.getItem('tomEntries');
+                if (savedEntries) {
+                    entries = JSON.parse(savedEntries);
+                    displayEntries();
+                }
+
+                const savedTrusted = localStorage.getItem('tomTrusted');
+                if (savedTrusted) {
+                    trustedKeys = new Map(JSON.parse(savedTrusted));
+                    displayTrusted();
+                }
+
+                log('Identity loaded');
+            } else {
+                generateIdentity();
+            }
+        }
+
+        window.copyMyIdentity = function() {
+            const text = `Tom's Keys:\nPublic: ${nacl.util.encodeBase64(tomKeyPair.publicKey)}\nEncryption: ${nacl.util.encodeBase64(tomBoxKeyPair.publicKey)}`;
+            navigator.clipboard.writeText(text).then(() => {
+                log('Identity copied');
+            }).catch(() => {
+                log('Copy manually: ' + text);
+            });
+        }
+
+        window.trustBob = function() {
+            const bobPublicKey = document.getElementById('bobPublicKey').value;
+            const bobBoxPublicKey = document.getElementById('bobBoxPublicKey').value;
+
+            if (!bobPublicKey || !bobBoxPublicKey) {
+                log('Enter both keys');
+                return;
+            }
+
+            trustedKeys.set(bobPublicKey, {
+                boxPublicKey: bobBoxPublicKey,
+                trustedAt: Date.now()
+            });
+
+            // Save to localStorage
+            localStorage.setItem('tomTrusted', JSON.stringify(Array.from(trustedKeys.entries())));
+
+            document.getElementById('bobPublicKey').value = '';
+            document.getElementById('bobBoxPublicKey').value = '';
+
+            displayTrusted();
+            log('Bob trusted');
+
+            // If P2P is active, send announcement
+            if (sendAnnouncement) {
+                broadcastToTrusted();
+            }
+        }
+
+        function displayTrusted() {
+            const list = document.getElementById('trustedList');
+            if (trustedKeys.size === 0) {
+                list.innerHTML = '<div style="color: #999;">No trusted users yet</div>';
+            } else {
+                list.innerHTML = '<h4>Trusted Users:</h4>' +
+                    Array.from(trustedKeys.entries()).map(([key, info]) => `
+                        <div class="trusted-item">
+                            <strong>User:</strong> ${key.substring(0, 32)}...<br>
+                            <small>Trusted: ${new Date(info.trustedAt).toLocaleString()}</small>
+                        </div>
+                    `).join('');
+            }
+        }
+
+        window.addEntry = function() {
+            const content = document.getElementById('newEntry').value;
+            if (!content) return;
+
+            const entry = {
+                id: entries.length + 1,
+                content: content,
+                timestamp: Date.now(),
+                author: "Tom"
+            };
+
+            entries.push(entry);
+            saveEntries();
+            displayEntries();
+
+            document.getElementById('newEntry').value = '';
+            log('Entry added');
+
+            // Broadcast to peers if connected
+            if (sendEntry) {
+                sendEntry(entry);
+            }
+        }
+
+        function saveEntries() {
+            localStorage.setItem('tomEntries', JSON.stringify(entries));
+        }
+
+        function displayEntries() {
+            const div = document.getElementById('entries');
+            div.innerHTML = entries.map(e => `
+                <div class="entry">
+                    <strong>${e.author}</strong> - ${new Date(e.timestamp).toLocaleString()}<br>
+                    ${e.content}
+                </div>
+            `).join('');
+        }
+
+        function createRoomId(tomPubKey, bobPubKey) {
+            const combined = `diary:${tomPubKey}:${bobPubKey}`;
+            const hash = nacl.hash(nacl.util.decodeUTF8(combined));
+            return nacl.util.encodeBase64(hash).substring(0, 16);
+        }
+
+        function encryptForBob(data, bobBoxPublicKey) {
+            const message = nacl.util.decodeUTF8(JSON.stringify(data));
+            const nonce = nacl.randomBytes(nacl.box.nonceLength);
+            const encrypted = nacl.box(
+                message,
+                nonce,
+                nacl.util.decodeBase64(bobBoxPublicKey),
+                tomBoxKeyPair.secretKey
+            );
+
+            return {
+                nonce: nacl.util.encodeBase64(nonce),
+                encrypted: nacl.util.encodeBase64(encrypted)
+            };
+        }
+
+        function broadcastToTrusted() {
+            trustedKeys.forEach((info, bobPublicKey) => {
+                const announcement = {
+                    type: 'diary_announcement',
+                    owner: 'Tom',
+                    tomPublicKey: nacl.util.encodeBase64(tomKeyPair.publicKey),
+                    tomBoxPublicKey: nacl.util.encodeBase64(tomBoxKeyPair.publicKey),
+                    timestamp: Date.now()
+                };
+
+                const encrypted = encryptForBob(announcement, info.boxPublicKey);
+                if (sendAnnouncement) {
+                    sendAnnouncement(encrypted);
+                }
+            });
+        }
+
+        window.startP2P = function() {
+            if (dhtRoom) {
+                log('Already connected');
+                return;
+            }
+
+            if (trustedKeys.size === 0) {
+                log('Trust someone first');
+                return;
+            }
+
+            // Create room for each trusted user
+            trustedKeys.forEach((info, bobPublicKey) => {
+                const roomId = createRoomId(nacl.util.encodeBase64(tomKeyPair.publicKey), bobPublicKey);
+
+                log('Joining room: ' + roomId);
+                dhtRoom = window.joinRoom(
+                    { appId: 'trust-diary', password: roomId },
+                    roomId
+                );
+
+                let peerCount = 0;
+
+                dhtRoom.onPeerJoin(peerId => {
+                    peerCount++;
+                    document.getElementById('peerCount').textContent = peerCount;
+                    log('Peer joined: ' + peerId.substring(0, 8) + '...');
+
+                    // Send current entries to new peer
+                    if (sendEntry) {
+                        entries.forEach(entry => sendEntry(entry));
+                    }
+                });
+
+                dhtRoom.onPeerLeave(peerId => {
+                    peerCount--;
+                    document.getElementById('peerCount').textContent = peerCount;
+                });
+
+                // Set up data channels
+                [sendEntry] = dhtRoom.makeAction('entry');
+                [sendAnnouncement] = dhtRoom.makeAction('announcement');
+
+                const [, getRequest] = dhtRoom.makeAction('request');
+                getRequest((data, peerId) => {
+                    if (data.type === 'get_entries') {
+                        // Verify the request is from trusted user
+                        entries.forEach(entry => sendEntry(entry));
+                    }
+                });
+
+                document.getElementById('roomStatus').textContent = 'Connected to ' + roomId;
+
+                // Broadcast announcement
+                broadcastToTrusted();
+            });
+        }
+
+        window.stopP2P = function() {
+            if (dhtRoom) {
+                dhtRoom.leave();
+                dhtRoom = null;
+                sendEntry = null;
+                sendAnnouncement = null;
+                document.getElementById('roomStatus').textContent = 'Not connected';
+                document.getElementById('peerCount').textContent = '0';
+                log('P2P stopped');
+            }
+        }
+
+        // Initialize
+        loadOrGenerateIdentity();
+    </script>
+</body>
+</html>

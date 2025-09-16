@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Trust Diary P2P Test Client</title>
+    <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl-fast.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tweetnacl-util@0.15.1/nacl-util.min.js"></script>
+    <script src="https://unpkg.com/nostr-tools@1.17.0/lib/nostr.bundle.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        }
+
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+
+        .quick-connect {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .quick-connect h2 {
+            margin-bottom: 15px;
+        }
+
+        .quick-connect button {
+            background: white;
+            color: #667eea;
+            font-size: 18px;
+            padding: 15px 30px;
+            margin: 10px;
+        }
+
+        .method-section {
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .method-section h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            background: #5a67d8;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 120px;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 13px;
+            margin: 10px 0;
+        }
+
+        .status {
+            padding: 15px;
+            background: #f0f4ff;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            padding: 5px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .status-value {
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .connected {
+            color: #28a745;
+        }
+
+        .disconnected {
+            color: #dc3545;
+        }
+
+        .log {
+            background: #2d3748;
+            color: #48bb78;
+            padding: 15px;
+            border-radius: 6px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            margin-top: 20px;
+        }
+
+        .entry {
+            background: #f9f9f9;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 6px;
+        }
+
+        .entry-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .success-msg {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            display: none;
+        }
+
+        .error-msg {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            display: none;
+        }
+
+        .service-info {
+            background: #e3f2fd;
+            border: 2px solid #90caf9;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+
+        .copy-btn {
+            background: #28a745;
+            padding: 8px 16px;
+            font-size: 14px;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Trust Diary P2P Client - Test Interface</h1>
+
+        <div class="service-info">
+            <h3>📡 Current Service Info:</h3>
+            <p><strong>Nostr Pubkey:</strong> <code>57cafe5a87555d0271c2fb995f58e05ba80896ea81b5ca0b6e602bbcdb2cc0da</code></p>
+            <p><strong>Service URL:</strong> <code id="serviceUrlDisplay">Detecting...</code></p>
+            <p><strong>Status:</strong> <span id="serviceStatus">Checking...</span></p>
+        </div>
+
+        <div class="quick-connect">
+            <h2>⚡ Quick Connect</h2>
+            <button onclick="quickConnectNostr()">🌐 Connect via Nostr (Automatic)</button>
+            <button onclick="quickConnectManual()">📋 Connect Manually</button>
+        </div>
+
+        <div class="status">
+            <h3>Connection Status</h3>
+            <div class="status-item">
+                <span>WebRTC State:</span>
+                <span class="status-value" id="rtcState">Not Connected</span>
+            </div>
+            <div class="status-item">
+                <span>Data Channel:</span>
+                <span class="status-value" id="channelState">Closed</span>
+            </div>
+            <div class="status-item">
+                <span>Discovery Method:</span>
+                <span class="status-value" id="discoveryMethod">-</span>
+            </div>
+            <div class="status-item">
+                <span>Authentication:</span>
+                <span class="status-value" id="authState">-</span>
+            </div>
+        </div>
+
+        <div class="success-msg" id="successMsg"></div>
+        <div class="error-msg" id="errorMsg"></div>
+
+        <!-- Method 1: Nostr -->
+        <div class="method-section">
+            <h3>Method 1: Nostr Discovery (Automatic)</h3>
+            <p>The service's Nostr pubkey is pre-filled. Just click connect!</p>
+            <button onclick="connectViaNostr()">Connect via Nostr</button>
+        </div>
+
+        <!-- Method 2: Manual -->
+        <div class="method-section">
+            <h3>Method 2: Manual Exchange (Zero Infrastructure)</h3>
+            <button onclick="getOffer()">Step 1: Get Offer from Service</button>
+            <textarea id="offerText" placeholder="Offer will appear here..."></textarea>
+            <button onclick="generateAnswer()">Step 2: Generate Answer</button>
+            <textarea id="answerText" placeholder="Answer will appear here..."></textarea>
+            <button onclick="submitAnswer()">Step 3: Submit Answer</button>
+        </div>
+
+        <div class="method-section">
+            <h3>📝 Diary Entries</h3>
+            <div id="entries">
+                <div style="color: #999;">Connect to see entries...</div>
+            </div>
+        </div>
+
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+        // Configuration
+        const SERVICE_NOSTR_PUBKEY = '57cafe5a87555d0271c2fb995f58e05ba80896ea81b5ca0b6e602bbcdb2cc0da';
+        // Auto-detect service URL based on where page is loaded from
+        const SERVICE_URL = window.location.hostname === 'localhost'
+            ? 'http://localhost:3334'
+            : `http://${window.location.hostname}:3334`;
+        const NOSTR_RELAYS = [
+            'wss://relay.damus.io',
+            'wss://relay.nostr.band',
+            'wss://nos.lol',
+            'wss://relay.primal.net'
+        ];
+
+        // State
+        let myKeyPair = null;
+        let myBoxKeyPair = null;
+        let peerConnection = null;
+        let dataChannel = null;
+        let currentOffer = null;
+        let entries = [];
+
+        // Initialize identity
+        function initIdentity() {
+            myKeyPair = nacl.sign.keyPair();
+            myBoxKeyPair = nacl.box.keyPair();
+            log('🔑 Generated identity');
+        }
+
+        // Logging
+        function log(msg) {
+            const logDiv = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `<div>[${time}] ${msg}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function showSuccess(msg) {
+            const div = document.getElementById('successMsg');
+            div.textContent = msg;
+            div.style.display = 'block';
+            setTimeout(() => div.style.display = 'none', 5000);
+        }
+
+        function showError(msg) {
+            const div = document.getElementById('errorMsg');
+            div.textContent = msg;
+            div.style.display = 'block';
+            setTimeout(() => div.style.display = 'none', 5000);
+        }
+
+        // Quick connects
+        async function quickConnectNostr() {
+            log('⚡ Quick connecting via Nostr...');
+            await connectViaNostr();
+        }
+
+        async function quickConnectManual() {
+            log('⚡ Quick connecting manually...');
+            await getOffer();
+        }
+
+        // Method 1: Nostr Discovery
+        async function connectViaNostr() {
+            log('🔍 Connecting via Nostr...');
+            document.getElementById('discoveryMethod').textContent = 'Nostr';
+
+            const { SimplePool } = window.NostrTools;
+            const pool = new SimplePool();
+
+            log(`📡 Looking for service: ${SERVICE_NOSTR_PUBKEY.substring(0, 16)}...`);
+
+            const filter = {
+                authors: [SERVICE_NOSTR_PUBKEY],
+                kinds: [21000],
+                limit: 1
+            };
+
+            try {
+                const sub = pool.sub(NOSTR_RELAYS, [filter]);
+
+                const timeout = setTimeout(() => {
+                    sub.unsub();
+                    showError('No offers found on Nostr. Try manual method.');
+                    log('❌ Timeout - no offers found');
+                }, 10000);
+
+                sub.on('event', (event) => {
+                    clearTimeout(timeout);
+                    log('✅ Found offer on Nostr!');
+
+                    try {
+                        const offer = JSON.parse(event.content);
+                        currentOffer = offer;
+                        processOffer(offer);
+                        sub.unsub();
+                    } catch (err) {
+                        showError('Failed to parse offer');
+                        log(`❌ Parse error: ${err.message}`);
+                    }
+                });
+
+                sub.on('eose', () => {
+                    log('📚 End of stored events');
+                });
+
+            } catch (err) {
+                showError('Failed to connect to Nostr');
+                log(`❌ Nostr error: ${err.message}`);
+            }
+        }
+
+        // Method 2: Manual Exchange
+        async function getOffer() {
+            log('📥 Getting offer from service...');
+            document.getElementById('discoveryMethod').textContent = 'Manual';
+
+            try {
+                const response = await fetch(`${SERVICE_URL}/api/offer`);
+                const offer = await response.json();
+
+                currentOffer = offer;
+                document.getElementById('offerText').value = JSON.stringify(offer, null, 2);
+
+                log(`✅ Got offer ID: ${offer.offerId}`);
+                showSuccess('Offer received! Click "Generate Answer"');
+            } catch (err) {
+                showError('Failed to get offer. Is service running?');
+                log(`❌ Error: ${err.message}`);
+            }
+        }
+
+        async function generateAnswer() {
+            if (!currentOffer) {
+                showError('Get offer first!');
+                return;
+            }
+
+            log('🔧 Generating answer...');
+            await processOffer(currentOffer);
+        }
+
+        async function submitAnswer() {
+            const answerText = document.getElementById('answerText').value;
+            if (!answerText) {
+                showError('Generate answer first!');
+                return;
+            }
+
+            log('📤 Submitting answer to service...');
+
+            try {
+                const response = await fetch(`${SERVICE_URL}/api/answer`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: answerText
+                });
+
+                if (response.ok) {
+                    log('✅ Answer submitted!');
+                    showSuccess('Answer submitted! Waiting for connection...');
+                } else {
+                    showError('Failed to submit answer');
+                }
+            } catch (err) {
+                showError('Failed to submit answer');
+                log(`❌ Error: ${err.message}`);
+            }
+        }
+
+        // WebRTC Processing
+        async function processOffer(offer) {
+            log('🔧 Processing WebRTC offer...');
+
+            const config = {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' }
+                ]
+            };
+
+            peerConnection = new RTCPeerConnection(config);
+
+            // Monitor state
+            peerConnection.onconnectionstatechange = () => {
+                const state = peerConnection.connectionState;
+                document.getElementById('rtcState').textContent = state;
+                document.getElementById('rtcState').className =
+                    state === 'connected' ? 'status-value connected' : 'status-value';
+                log(`🔌 WebRTC: ${state}`);
+
+                if (state === 'connected') {
+                    showSuccess('✅ Connected via P2P!');
+                }
+            };
+
+            // Handle data channel
+            peerConnection.ondatachannel = (event) => {
+                dataChannel = event.channel;
+
+                dataChannel.onopen = () => {
+                    document.getElementById('channelState').textContent = 'Open';
+                    document.getElementById('channelState').className = 'status-value connected';
+                    log('📡 Data channel opened!');
+                };
+
+                dataChannel.onmessage = (event) => {
+                    handleMessage(event.data);
+                };
+
+                dataChannel.onclose = () => {
+                    document.getElementById('channelState').textContent = 'Closed';
+                    document.getElementById('channelState').className = 'status-value disconnected';
+                };
+            };
+
+            // Set remote description
+            await peerConnection.setRemoteDescription({
+                type: 'offer',
+                sdp: offer.sdp
+            });
+
+            // Create answer
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+
+            const answerData = {
+                type: 'answer',
+                sdp: answer.sdp,
+                offerId: offer.offerId || offer.offer_id
+            };
+
+            // Show answer for manual submission
+            if (document.getElementById('discoveryMethod').textContent === 'Manual') {
+                document.getElementById('answerText').value = JSON.stringify(answerData, null, 2);
+                showSuccess('Answer generated! Click "Submit Answer"');
+            }
+
+            log('✅ Answer ready');
+        }
+
+        // Message handling
+        function handleMessage(data) {
+            try {
+                const msg = JSON.parse(data);
+
+                switch (msg.type) {
+                    case 'challenge':
+                        handleAuthChallenge(msg);
+                        break;
+                    case 'entry':
+                        handleEntry(msg.entry);
+                        break;
+                    default:
+                        log(`📨 Message: ${msg.type}`);
+                }
+            } catch (err) {
+                log(`❌ Message error: ${err.message}`);
+            }
+        }
+
+        function handleAuthChallenge(msg) {
+            log('🔐 Received auth challenge');
+
+            const challenge = nacl.util.decodeBase64(msg.challenge);
+            const signature = nacl.sign.detached(challenge, myKeyPair.secretKey);
+
+            const response = {
+                type: 'response',
+                signature: nacl.util.encodeBase64(signature),
+                publicKey: nacl.util.encodeBase64(myKeyPair.publicKey),
+                boxPublicKey: nacl.util.encodeBase64(myBoxKeyPair.publicKey)
+            };
+
+            dataChannel.send(JSON.stringify(response));
+            log('🔑 Sent auth response');
+        }
+
+        function handleEntry(entry) {
+            document.getElementById('authState').textContent = 'Authenticated';
+            document.getElementById('authState').className = 'status-value connected';
+
+            entries.push(entry);
+            displayEntries();
+
+            if (entries.length === 1) {
+                dataChannel.send(JSON.stringify({ type: 'request' }));
+            }
+        }
+
+        function displayEntries() {
+            const div = document.getElementById('entries');
+            if (entries.length === 0) {
+                div.innerHTML = '<div style="color: #999;">No entries yet</div>';
+            } else {
+                div.innerHTML = entries.map(e => `
+                    <div class="entry">
+                        <div class="entry-header">
+                            <strong>${e.Author || e.author || 'Unknown'}</strong>
+                            <span>${new Date(e.Timestamp || e.timestamp).toLocaleString()}</span>
+                        </div>
+                        <div>${e.Content || e.content}</div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        // Check service status
+        async function checkServiceStatus() {
+            try {
+                const response = await fetch(`${SERVICE_URL}/api/status`);
+                if (response.ok) {
+                    document.getElementById('serviceStatus').innerHTML =
+                        '<span class="connected">✅ Running</span>';
+                } else {
+                    document.getElementById('serviceStatus').innerHTML =
+                        '<span class="disconnected">❌ Not responding</span>';
+                }
+            } catch (err) {
+                document.getElementById('serviceStatus').innerHTML =
+                    '<span class="disconnected">❌ Offline</span>';
+            }
+        }
+
+        // Initialize
+        initIdentity();
+        checkServiceStatus();
+        log('🚀 Client ready!');
+        log('📍 This page loaded from: ' + window.location.protocol);
+        log('💡 Try Quick Connect buttons above!');
+    </script>
+</body>
+</html>

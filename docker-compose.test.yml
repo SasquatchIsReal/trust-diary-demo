@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  # Pure P2P test runner with multiple browser instances
+  p2p-test-runner:
+    image: mcr.microsoft.com/playwright:v1.40.0-focal
+    container_name: p2p-test-runner
+    networks:
+      - test-network
+    volumes:
+      - ./:/app
+    working_dir: /app
+    environment:
+      - CI=true
+      - PWTEST_SKIP_TEST_OUTPUT=1
+    command: >
+      sh -c "
+        npm ci &&
+        npx playwright install chromium &&
+        npm run test:p2p
+      "
+
+networks:
+  test-network:
+    driver: bridge

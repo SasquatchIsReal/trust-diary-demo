@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Remote P2P Test</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #0f0; }
+        button { background: #0f0; color: #000; padding: 10px 20px; border: none; cursor: pointer; margin: 10px; }
+        #log { background: #000; padding: 20px; margin-top: 20px; min-height: 300px; white-space: pre-wrap; }
+        .error { color: #f00; }
+        .success { color: #0f0; }
+    </style>
+</head>
+<body>
+    <h1>🌐 Remote P2P Connection Test</h1>
+
+    <div>
+        <strong>Service URL:</strong> <span id="serviceUrl"></span><br>
+        <strong>Status:</strong> <span id="status">Not connected</span>
+    </div>
+
+    <button onclick="testAPI()">Test API</button>
+    <button onclick="getOffer()">Get WebRTC Offer</button>
+    <button onclick="testNostr()">Test Nostr Discovery</button>
+
+    <div id="log"></div>
+
+    <script src="https://unpkg.com/nostr-tools@1.17.0/lib/nostr.bundle.js"></script>
+    <script>
+        // Auto-detect service URL
+        const SERVICE_URL = window.location.hostname === 'localhost'
+            ? 'http://localhost:3334'
+            : `http://${window.location.hostname}:3334`;
+
+        document.getElementById('serviceUrl').textContent = SERVICE_URL;
+
+        function log(msg, type = '') {
+            const logEl = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type ? ` class="${type}"` : '';
+            logEl.innerHTML += `<span${className}>[${timestamp}] ${msg}</span>\n`;
+        }
+
+        async function testAPI() {
+            log('Testing API connectivity...');
+            try {
+                const response = await fetch(`${SERVICE_URL}/api/status`);
+                const data = await response.json();
+                log(`✅ API works! Service pubkey: ${data.nostrPubKey}`, 'success');
+                document.getElementById('status').textContent = 'API Connected';
+                document.getElementById('status').className = 'success';
+            } catch (err) {
+                log(`❌ API Error: ${err.message}`, 'error');
+                document.getElementById('status').textContent = 'API Failed';
+                document.getElementById('status').className = 'error';
+            }
+        }
+
+        async function getOffer() {
+            log('Getting WebRTC offer...');
+            try {
+                const response = await fetch(`${SERVICE_URL}/api/offer`);
+                const offer = await response.json();
+                log(`✅ Got offer! ID: ${offer.offerId}`, 'success');
+                log(`SDP length: ${offer.sdp.length} characters`);
+
+                // Try to create answer
+                const pc = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                });
+
+                await pc.setRemoteDescription({ type: 'offer', sdp: offer.sdp });
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+
+                log('✅ Created answer, ready to connect!', 'success');
+            } catch (err) {
+                log(`❌ Offer Error: ${err.message}`, 'error');
+            }
+        }
+
+        async function testNostr() {
+            log('Testing Nostr discovery...');
+            const SERVICE_NOSTR_PUBKEY = '57cafe5a87555d0271c2fb995f58e05ba80896ea81b5ca0b6e602bbcdb2cc0da';
+
+            try {
+                const { SimplePool } = window.NostrTools;
+                const pool = new SimplePool();
+
+                const filter = {
+                    authors: [SERVICE_NOSTR_PUBKEY],
+                    kinds: [21000],
+                    limit: 1
+                };
+
+                const RELAYS = ['wss://relay.damus.io', 'wss://nos.lol'];
+                log(`Querying ${RELAYS.length} relays...`);
+
+                const sub = pool.sub(RELAYS, [filter]);
+
+                const timeout = setTimeout(() => {
+                    sub.unsub();
+                    log('⏱️ Timeout - no events found', 'error');
+                }, 10000);
+
+                sub.on('event', (event) => {
+                    clearTimeout(timeout);
+                    log(`✅ Found service on Nostr!`, 'success');
+                    log(`Event ID: ${event.id}`);
+                    log(`Created: ${new Date(event.created_at * 1000).toLocaleString()}`);
+
+                    try {
+                        const offer = JSON.parse(event.content);
+                        log(`✅ Parsed offer! ID: ${offer.offerId}`, 'success');
+                    } catch (err) {
+                        log(`Parse error: ${err.message}`, 'error');
+                    }
+
+                    sub.unsub();
+                });
+
+            } catch (err) {
+                log(`❌ Nostr Error: ${err.message}`, 'error');
+            }
+        }
+
+        // Auto-test on load
+        setTimeout(testAPI, 500);
+    </script>
+</body>
+</html>

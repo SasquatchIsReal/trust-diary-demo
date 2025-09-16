@@ -1,0 +1,124 @@
+name: P2P Network Isolation Tests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-p2p-connectivity:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Install Docker Compose
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y docker-compose
+
+    - name: Build test containers
+      run: docker-compose -f docker-compose.test.yml build
+
+    - name: Run P2P network tests
+      run: |
+        docker-compose -f docker-compose.test.yml up --abort-on-container-exit --exit-code-from test-runner
+      timeout-minutes: 10
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results
+        path: |
+          test-results/
+          playwright-report/
+
+    - name: Upload test videos
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-videos
+        path: test-results/videos/
+
+    - name: Clean up
+      if: always()
+      run: docker-compose -f docker-compose.test.yml down -v
+
+  test-network-conditions:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        condition: [high-latency, packet-loss, low-bandwidth]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Build test containers
+      run: docker-compose -f docker-compose.test.yml build
+
+    - name: Run tests with ${{ matrix.condition }}
+      run: |
+        docker-compose -f docker-compose.test.yml up -d tom-peer bob-peer
+
+        # Apply network conditions
+        if [ "${{ matrix.condition }}" = "high-latency" ]; then
+          docker exec tom-peer tc qdisc add dev eth0 root netem delay 300ms 50ms
+          docker exec bob-peer tc qdisc add dev eth0 root netem delay 300ms 50ms
+        elif [ "${{ matrix.condition }}" = "packet-loss" ]; then
+          docker exec tom-peer tc qdisc add dev eth0 root netem loss 5%
+          docker exec bob-peer tc qdisc add dev eth0 root netem loss 5%
+        elif [ "${{ matrix.condition }}" = "low-bandwidth" ]; then
+          docker exec tom-peer tc qdisc add dev eth0 root tbf rate 512kbit burst 32kbit latency 100ms
+          docker exec bob-peer tc qdisc add dev eth0 root tbf rate 512kbit burst 32kbit latency 100ms
+        fi
+
+        # Run tests
+        docker-compose -f docker-compose.test.yml run test-runner
+      timeout-minutes: 15
+
+    - name: Clean up
+      if: always()
+      run: docker-compose -f docker-compose.test.yml down -v
+
+  test-browser-compatibility:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        browser: [chromium, firefox, webkit]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Install Playwright browsers
+      run: npx playwright install --with-deps ${{ matrix.browser }}
+
+    - name: Start test servers
+      run: |
+        npm run serve:test &
+        sleep 5
+
+    - name: Run tests on ${{ matrix.browser }}
+      run: npx playwright test --project=${{ matrix.browser }}
+      env:
+        TOM_URL: http://localhost:3001
+        BOB_URL: http://localhost:3002
+
+    - name: Upload results for ${{ matrix.browser }}
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results-${{ matrix.browser }}
+        path: playwright-report/

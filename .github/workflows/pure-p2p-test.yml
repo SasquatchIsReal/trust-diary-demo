@@ -1,0 +1,88 @@
+name: Pure P2P Browser Tests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-pure-p2p:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Install Playwright browsers
+      run: npx playwright install --with-deps chromium firefox
+
+    - name: Run pure P2P tests
+      run: npm run test:p2p
+      timeout-minutes: 10
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: playwright-report
+        path: playwright-report/
+
+    - name: Upload test videos
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-videos
+        path: test-results/**/*.webm
+
+  test-browser-isolation:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        browser: [chromium, firefox]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Install Playwright
+      run: npx playwright install --with-deps ${{ matrix.browser }}
+
+    - name: Test P2P in ${{ matrix.browser }}
+      run: npx playwright test tests/pure-p2p.spec.ts --project=${{ matrix.browser }}
+
+    - name: Verify no server dependencies
+      run: |
+        # Ensure tests don't start any servers
+        ! grep -r "http-server\|express\|ws:" tests/ || exit 1
+        echo "✅ Tests are pure P2P - no server dependencies found"
+
+  test-docker-isolation:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Run P2P tests in Docker
+      run: |
+        docker-compose -f docker-compose.test.yml up --abort-on-container-exit --exit-code-from p2p-test-runner
+      timeout-minutes: 15
+
+    - name: Clean up
+      if: always()
+      run: docker-compose -f docker-compose.test.yml down -v

@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bob's Diary Reader (P2P)</title>
+    <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl-fast.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tweetnacl-util@0.15.1/nacl-util.min.js"></script>
+    <script type="module">
+        import {joinRoom} from 'https://cdn.skypack.dev/trystero/torrent'
+        window.joinRoom = joinRoom;
+    </script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #fff;
+            color: #333;
+        }
+        h1 { border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .section {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 20px;
+            margin: 20px 0;
+            background: #fafafa;
+        }
+        h3 { margin-top: 0; color: #555; }
+        input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #007aff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover { background: #0051a8; }
+        .key {
+            font-family: monospace;
+            font-size: 13px;
+            padding: 10px;
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 10px 0;
+            word-break: break-all;
+        }
+        .entry {
+            padding: 15px;
+            margin: 10px 0;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+        }
+        .status {
+            padding: 12px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .connected { background: #e8f5e9; color: #2e7d32; }
+        .disconnected { background: #ffebee; color: #c62828; }
+        .searching { background: #fff3e0; color: #e65100; }
+        .log {
+            height: 150px;
+            overflow-y: auto;
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Bob's Diary Reader (P2P)</h1>
+
+    <div class="status disconnected" id="statusBox">
+        Status: <strong id="status">Not connected</strong>
+    </div>
+
+    <div class="section">
+        <h3>My Identity</h3>
+        <div class="key">
+            <strong>Public Key:</strong> <span id="publicKey">Generating...</span>
+        </div>
+        <div class="key">
+            <strong>Encryption Key:</strong> <span id="boxPublicKey">Generating...</span>
+        </div>
+        <button onclick="copyMyIdentity()">Copy My Identity</button>
+    </div>
+
+    <div class="section">
+        <h3>Connect to Tom</h3>
+        <input type="text" id="tomPublicKey" placeholder="Tom's Public Key">
+        <input type="text" id="tomBoxPublicKey" placeholder="Tom's Encryption Key">
+        <button onclick="connectToTom()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+
+        <div style="margin-top: 15px;">
+            <div>Room: <span id="roomId">Not connected</span></div>
+            <div>Peers: <span id="peerCount">0</span></div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>Diary Entries</h3>
+        <div id="entries">
+            <div style="color: #999;">Connect to Tom first</div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>Log</h3>
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+        // Bob's state
+        let bobKeyPair = null;
+        let bobBoxKeyPair = null;
+        let tomInfo = null;
+        let dhtRoom = null;
+        let entries = [];
+
+        function log(msg) {
+            const logDiv = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            logDiv.innerHTML = `[${time}] ${msg}\n` + logDiv.innerHTML;
+        }
+
+        function generateIdentity() {
+            bobKeyPair = nacl.sign.keyPair();
+            bobBoxKeyPair = nacl.box.keyPair();
+
+            const publicKeyStr = nacl.util.encodeBase64(bobKeyPair.publicKey);
+            const boxPublicKeyStr = nacl.util.encodeBase64(bobBoxKeyPair.publicKey);
+
+            document.getElementById('publicKey').textContent = publicKeyStr.substring(0, 32) + '...';
+            document.getElementById('boxPublicKey').textContent = boxPublicKeyStr.substring(0, 32) + '...';
+
+            localStorage.setItem('bobIdentity', JSON.stringify({
+                publicKey: publicKeyStr,
+                secretKey: nacl.util.encodeBase64(bobKeyPair.secretKey),
+                boxPublicKey: boxPublicKeyStr,
+                boxSecretKey: nacl.util.encodeBase64(bobBoxKeyPair.secretKey)
+            }));
+
+            log('Identity generated');
+        }
+
+        function loadOrGenerateIdentity() {
+            const stored = localStorage.getItem('bobIdentity');
+            if (stored) {
+                const identity = JSON.parse(stored);
+                bobKeyPair = {
+                    publicKey: nacl.util.decodeBase64(identity.publicKey),
+                    secretKey: nacl.util.decodeBase64(identity.secretKey)
+                };
+                bobBoxKeyPair = {
+                    publicKey: nacl.util.decodeBase64(identity.boxPublicKey),
+                    secretKey: nacl.util.decodeBase64(identity.boxSecretKey)
+                };
+
+                document.getElementById('publicKey').textContent = identity.publicKey.substring(0, 32) + '...';
+                document.getElementById('boxPublicKey').textContent = identity.boxPublicKey.substring(0, 32) + '...';
+
+                log('Identity loaded');
+            } else {
+                generateIdentity();
+            }
+        }
+
+        window.copyMyIdentity = function() {
+            const text = `Bob's Keys:\nPublic: ${nacl.util.encodeBase64(bobKeyPair.publicKey)}\nEncryption: ${nacl.util.encodeBase64(bobBoxKeyPair.publicKey)}`;
+            navigator.clipboard.writeText(text).then(() => {
+                log('Identity copied - send to Tom');
+            }).catch(() => {
+                log('Copy manually: ' + text);
+            });
+        }
+
+        function createRoomId(tomPubKey, bobPubKey) {
+            const combined = `diary:${tomPubKey}:${bobPubKey}`;
+            const hash = nacl.hash(nacl.util.decodeUTF8(combined));
+            return nacl.util.encodeBase64(hash).substring(0, 16);
+        }
+
+        function decryptFromTom(encrypted, tomBoxPublicKey) {
+            try {
+                const nonce = nacl.util.decodeBase64(encrypted.nonce);
+                const ciphertext = nacl.util.decodeBase64(encrypted.encrypted);
+                const decrypted = nacl.box.open(
+                    ciphertext,
+                    nonce,
+                    nacl.util.decodeBase64(tomBoxPublicKey),
+                    bobBoxKeyPair.secretKey
+                );
+                if (decrypted) {
+                    return JSON.parse(nacl.util.encodeUTF8(decrypted));
+                }
+            } catch (e) {
+                return null;
+            }
+        }
+
+        window.connectToTom = function() {
+            const tomPublicKey = document.getElementById('tomPublicKey').value;
+            const tomBoxPublicKey = document.getElementById('tomBoxPublicKey').value;
+
+            if (!tomPublicKey || !tomBoxPublicKey) {
+                log('Enter Tom\'s keys');
+                return;
+            }
+
+            if (dhtRoom) {
+                log('Already connected');
+                return;
+            }
+
+            tomInfo = { publicKey: tomPublicKey, boxPublicKey: tomBoxPublicKey };
+
+            const bobPublicKey = nacl.util.encodeBase64(bobKeyPair.publicKey);
+            const roomId = createRoomId(tomPublicKey, bobPublicKey);
+
+            log('Connecting to room: ' + roomId);
+            document.getElementById('roomId').textContent = roomId;
+            document.getElementById('status').textContent = 'Connecting...';
+            document.getElementById('statusBox').className = 'status searching';
+
+            dhtRoom = window.joinRoom(
+                { appId: 'trust-diary', password: roomId },
+                roomId
+            );
+
+            let peerCount = 0;
+
+            dhtRoom.onPeerJoin(peerId => {
+                peerCount++;
+                document.getElementById('peerCount').textContent = peerCount;
+                log('Connected to Tom!');
+                document.getElementById('status').textContent = 'Connected';
+                document.getElementById('statusBox').className = 'status connected';
+
+                // Request entries
+                if (sendRequest) {
+                    sendRequest({ type: 'get_entries' });
+                }
+            });
+
+            dhtRoom.onPeerLeave(peerId => {
+                peerCount--;
+                document.getElementById('peerCount').textContent = peerCount;
+                if (peerCount === 0) {
+                    document.getElementById('status').textContent = 'Tom disconnected';
+                    document.getElementById('statusBox').className = 'status disconnected';
+                }
+            });
+
+            // Set up data channels
+            const [, getEntry] = dhtRoom.makeAction('entry');
+            const [, getAnnouncement] = dhtRoom.makeAction('announcement');
+            const [sendRequest] = dhtRoom.makeAction('request');
+
+            getEntry((entry, peerId) => {
+                log('Received entry: ' + entry.content.substring(0, 30) + '...');
+
+                // Add or update entry
+                const existing = entries.findIndex(e => e.id === entry.id);
+                if (existing >= 0) {
+                    entries[existing] = entry;
+                } else {
+                    entries.push(entry);
+                }
+
+                // Sort by timestamp
+                entries.sort((a, b) => a.timestamp - b.timestamp);
+                displayEntries();
+            });
+
+            getAnnouncement((encrypted, peerId) => {
+                const decrypted = decryptFromTom(encrypted, tomBoxPublicKey);
+                if (decrypted) {
+                    log('Received announcement from Tom');
+                    if (decrypted.type === 'diary_announcement') {
+                        log('Tom\'s diary is active');
+                    }
+                }
+            });
+        }
+
+        window.disconnect = function() {
+            if (dhtRoom) {
+                dhtRoom.leave();
+                dhtRoom = null;
+                document.getElementById('roomId').textContent = 'Not connected';
+                document.getElementById('peerCount').textContent = '0';
+                document.getElementById('status').textContent = 'Disconnected';
+                document.getElementById('statusBox').className = 'status disconnected';
+                log('Disconnected');
+            }
+        }
+
+        function displayEntries() {
+            const div = document.getElementById('entries');
+            if (entries.length === 0) {
+                div.innerHTML = '<div style="color: #999;">No entries yet</div>';
+            } else {
+                div.innerHTML = entries.map(e => `
+                    <div class="entry">
+                        <strong>${e.author}</strong> - ${new Date(e.timestamp).toLocaleString()}<br>
+                        ${e.content}
+                    </div>
+                `).join('');
+            }
+        }
+
+        // Initialize
+        loadOrGenerateIdentity();
+        log('Ready - Get Tom to trust you first');
+    </script>
+</body>
+</html>
