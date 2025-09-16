@@ -181,14 +181,14 @@ func (s *TrustDiaryService) connectToNostr() error {
 			Tags: nostr.TagMap{
 				"p": []string{s.nostrPubKey}, // Messages for us
 			},
-			Since: &nostr.Timestamp{Time: time.Now().Add(-1 * time.Hour)},
+			Since: func() *nostr.Timestamp { t := nostr.Now(); t = nostr.Timestamp(t.Time().Add(-1 * time.Hour).Unix()); return &t }(),
 		},
 	}
 
 	sub := s.pool.SubMany(context.Background(), s.relays, filters)
 
 	go func() {
-		for ev := range sub.Events {
+		for ev := range sub {
 			s.handleNostrEvent(ev.Event)
 		}
 	}()
@@ -404,7 +404,7 @@ func (s *TrustDiaryService) publishEncryptedOffer(reader TrustedReader) {
 			continue
 		}
 
-		if err := relayConn.Publish(ctx, *ev); err == nil {
+		if _, err := relayConn.Publish(ctx, *ev); err == nil {
 			log.Printf("📤 Published encrypted offer for %s to %s", reader.Name, relay)
 		}
 		relayConn.Close()
@@ -443,7 +443,7 @@ func (s *TrustDiaryService) publishTrustedReadersList() {
 			continue
 		}
 
-		relayConn.Publish(ctx, *ev)
+		_, _ = relayConn.Publish(ctx, *ev)
 		relayConn.Close()
 	}
 
