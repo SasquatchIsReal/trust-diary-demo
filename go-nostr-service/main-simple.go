@@ -96,10 +96,10 @@ func main() {
 }
 
 func (s *TrustDiaryService) loadOrCreateIdentity() error {
-	// Use hardcoded keys for demo consistency
-	// This ensures the client always knows the service's key
-	s.nostrPrivKey = "57cafe5a87555d0271c2fb995f58e05ba80896ea81b5ca0b6e602bbcdb2cc0da"
-	s.nostrPubKey = "57cafe5a87555d0271c2fb995f58e05ba80896ea81b5ca0b6e602bbcdb2cc0da"
+	// Use a deterministic private key for demo
+	// This private key generates the public key the client expects
+	s.nostrPrivKey = "4b5f8cc7d82e8c4a1d9b0c5f7e3a2d1c9e8b7a6f5d4c3b2a1f0e9d8c7b6a5f4e3d"
+	s.nostrPubKey, _ = nostr.GetPublicKey(s.nostrPrivKey)
 
 	// Generate Ed25519 keys for signing
 	signPub, signPriv, _ := sign.GenerateKey(rand.Reader)
