@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Trust Diary P2P Client - Public Access</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://unpkg.com/nostr-tools@1.17.0/lib/nostr.bundle.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255,255,255,0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        .config-section {
+            background: #f7f7f7;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .config-section h3 {
+            color: #764ba2;
+            margin-bottom: 15px;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: monospace;
+            margin-bottom: 10px;
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #764ba2;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.connecting {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 10px 20px;
+            background: #e0e0e0;
+            border-radius: 8px 8px 0 0;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .tab.active {
+            background: white;
+            font-weight: bold;
+        }
+        .tab-content {
+            display: none;
+            background: white;
+            padding: 20px;
+            border-radius: 0 10px 10px 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .tab-content.active {
+            display: block;
+        }
+        #log {
+            background: #1e1e1e;
+            color: #0f0;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            height: 200px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+        }
+        .success { color: #4CAF50; }
+        .error { color: #f44336; }
+        .warning { color: #ff9800; }
+        .info { color: #2196F3; }
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            resize: vertical;
+        }
+        .quick-connect {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .quick-connect h3 {
+            color: white;
+            margin-bottom: 10px;
+        }
+        .quick-connect button {
+            background: white;
+            color: #f5576c;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Trust Diary P2P Client</h1>
+        <div class="subtitle">Zero-infrastructure peer-to-peer connection</div>
+
+        <div class="status disconnected" id="status">
+            Status: <span id="statusText">Not Connected</span> |
+            RTC: <span id="rtcState">new</span> |
+            Channel: <span id="channelState">-</span>
+        </div>
+
+        <div class="quick-connect">
+            <h3>⚡ Quick Connect</h3>
+            <button onclick="quickConnect()">🌐 Connect to Public Demo Service</button>
+            <small style="color: white; display: block; margin-top: 10px;">
+                Service URL: https://trust-diary-demo.loca.lt
+            </small>
+        </div>
+
+        <div class="config-section">
+            <h3>⚙️ Configuration</h3>
+            <label>Service URL (for manual exchange):</label>
+            <input type="text" id="serviceUrl" value="https://trust-diary-demo.loca.lt" placeholder="https://your-service.com or http://localhost:3334">
+            <small>Enter the URL where your trust diary service is running</small>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('nostr')">🌐 Nostr Discovery</div>
+            <div class="tab" onclick="switchTab('manual')">📋 Manual Exchange</div>
+            <div class="tab" onclick="switchTab('entries')">📖 Diary Entries</div>
+        </div>
+
+        <div id="nostr-tab" class="tab-content active">
+            <h3>Nostr-based Discovery</h3>
+            <p style="margin-bottom: 15px;">Enter the service's Nostr public key to discover it automatically:</p>
+
+            <input type="text" id="nostrPubkey" value="57cafe5a87555d0271c2fb995f58e05ba80896ea81b5ca0b6e602bbcdb2cc0da"
+                   placeholder="Nostr public key (hex format)">
+            <button onclick="findViaNostr()">🔍 Find Service on Nostr</button>
+
+            <div style="margin-top: 20px; padding: 15px; background: #f0f0f0; border-radius: 8px;">
+                <strong>How it works:</strong>
+                <ol style="margin-left: 20px; margin-top: 10px;">
+                    <li>Service publishes WebRTC offers to Nostr relays</li>
+                    <li>Client queries relays for offers from the service's pubkey</li>
+                    <li>Connection established directly - no server needed!</li>
+                </ol>
+            </div>
+        </div>
+
+        <div id="manual-tab" class="tab-content">
+            <h3>Manual SDP Exchange</h3>
+            <p style="margin-bottom: 15px;">Get the offer from the service and paste it here:</p>
+
+            <button onclick="fetchOffer()">📥 Fetch Offer from Service</button>
+            <button onclick="copyOffer()">📋 Copy Offer URL</button>
+
+            <label style="display: block; margin-top: 15px;">Paste offer here:</label>
+            <textarea id="offerText" placeholder='{"offerId":"...","sdp":"..."}'></textarea>
+
+            <button onclick="generateAnswer()" style="margin-top: 10px;">🔄 Generate Answer</button>
+
+            <div id="answerSection" style="display: none; margin-top: 20px;">
+                <label>Your answer (send this back to service):</label>
+                <textarea id="answerText" readonly></textarea>
+                <button onclick="copyAnswer()">📋 Copy Answer</button>
+                <button onclick="submitAnswer()">📤 Submit to Service</button>
+            </div>
+        </div>
+
+        <div id="entries-tab" class="tab-content">
+            <h3>📖 Diary Entries</h3>
+            <div id="entriesContainer">
+                <p style="color: #999;">No entries yet. Connect to a service first.</p>
+            </div>
+        </div>
+
+        <div id="log"></div>
+    </div>
+
+    <script>
+        // Global variables
+        let pc = null;
+        let dataChannel = null;
+        let currentOffer = null;
+        let identity = null;
+
+        // Configuration
+        const NOSTR_RELAYS = [
+            'wss://relay.damus.io',
+            'wss://relay.nostr.band',
+            'wss://nos.lol',
+            'wss://relay.primal.net'
+        ];
+
+        // Initialize
+        window.addEventListener('load', () => {
+            generateIdentity();
+            log('Client initialized', 'success');
+            log('Ready to connect to trust diary service', 'info');
+        });
+
+        function generateIdentity() {
+            // Generate a simple identity for this session
+            const array = new Uint8Array(32);
+            crypto.getRandomValues(array);
+            identity = btoa(String.fromCharCode.apply(null, array));
+            log(`Generated session identity: ${identity.substring(0, 16)}...`, 'info');
+        }
+
+        function quickConnect() {
+            log('Quick connecting to demo service...', 'info');
+            document.getElementById('nostrPubkey').value = '57cafe5a87555d0271c2fb995f58e05ba80896ea81b5ca0b6e602bbcdb2cc0da';
+            findViaNostr();
+        }
+
+        async function findViaNostr() {
+            const pubkey = document.getElementById('nostrPubkey').value.trim();
+            if (!pubkey) {
+                log('Please enter a Nostr public key', 'error');
+                return;
+            }
+
+            log(`Searching for service ${pubkey.substring(0, 16)}... on Nostr`, 'info');
+            updateStatus('connecting');
+
+            try {
+                const { SimplePool } = window.NostrTools;
+                const pool = new SimplePool();
+
+                const filter = {
+                    authors: [pubkey],
+                    kinds: [21000], // Custom kind for WebRTC offers
+                    limit: 5
+                };
+
+                log(`Querying ${NOSTR_RELAYS.length} relays...`, 'info');
+
+                const sub = pool.sub(NOSTR_RELAYS, [filter]);
+
+                const timeout = setTimeout(() => {
+                    sub.unsub();
+                    log('❌ Timeout - no offers found on Nostr', 'error');
+                    log('Try manual exchange instead', 'warning');
+                    updateStatus('disconnected');
+                }, 15000);
+
+                sub.on('event', async (event) => {
+                    clearTimeout(timeout);
+                    log('✅ Found service offer on Nostr!', 'success');
+                    log(`Event created: ${new Date(event.created_at * 1000).toLocaleString()}`, 'info');
+
+                    try {
+                        const offer = JSON.parse(event.content);
+                        log(`Offer ID: ${offer.offerId}`, 'info');
+                        currentOffer = offer;
+                        await processOffer(offer);
+                    } catch (err) {
+                        log(`Error processing offer: ${err.message}`, 'error');
+                    }
+
+                    sub.unsub();
+                });
+
+                sub.on('eose', () => {
+                    log('End of stored events from relay', 'info');
+                });
+
+            } catch (err) {
+                log(`Nostr error: ${err.message}`, 'error');
+                updateStatus('disconnected');
+            }
+        }
+
+        async function fetchOffer() {
+            const serviceUrl = document.getElementById('serviceUrl').value.trim();
+            if (!serviceUrl) {
+                log('Please enter a service URL', 'error');
+                return;
+            }
+
+            log(`Fetching offer from ${serviceUrl}...`, 'info');
+
+            try {
+                const response = await fetch(`${serviceUrl}/api/offer`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+                const offer = await response.json();
+                document.getElementById('offerText').value = JSON.stringify(offer, null, 2);
+                log(`✅ Fetched offer ID: ${offer.offerId}`, 'success');
+                currentOffer = offer;
+            } catch (err) {
+                log(`Failed to fetch offer: ${err.message}`, 'error');
+                log('Make sure the service URL is correct and CORS is enabled', 'warning');
+            }
+        }
+
+        function copyOffer() {
+            const serviceUrl = document.getElementById('serviceUrl').value.trim();
+            const offerUrl = `${serviceUrl}/api/offer`;
+            navigator.clipboard.writeText(offerUrl);
+            log('Offer URL copied to clipboard', 'success');
+        }
+
+        async function generateAnswer() {
+            const offerText = document.getElementById('offerText').value.trim();
+            if (!offerText) {
+                log('Please paste an offer first', 'error');
+                return;
+            }
+
+            try {
+                const offer = JSON.parse(offerText);
+                currentOffer = offer;
+                await processOffer(offer);
+
+                // Generate answer
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+
+                // Wait for ICE gathering
+                await waitForIceGathering();
+
+                const answerData = {
+                    offerId: offer.offerId,
+                    sdp: pc.localDescription.sdp,
+                    identity: identity
+                };
+
+                document.getElementById('answerText').value = JSON.stringify(answerData, null, 2);
+                document.getElementById('answerSection').style.display = 'block';
+                log('✅ Answer generated', 'success');
+
+            } catch (err) {
+                log(`Error generating answer: ${err.message}`, 'error');
+            }
+        }
+
+        async function processOffer(offer) {
+            log('Processing service offer...', 'info');
+            updateStatus('connecting');
+
+            // Create peer connection
+            pc = new RTCPeerConnection({
+                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+            });
+
+            // Set up event handlers
+            pc.oniceconnectionstatechange = () => {
+                log(`ICE state: ${pc.iceConnectionState}`, 'info');
+                document.getElementById('rtcState').textContent = pc.iceConnectionState;
+
+                if (pc.iceConnectionState === 'connected') {
+                    updateStatus('connected');
+                } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+                    updateStatus('disconnected');
+                }
+            };
+
+            pc.ondatachannel = (event) => {
+                dataChannel = event.channel;
+                setupDataChannel();
+                log('Data channel received from service', 'success');
+            };
+
+            // Set remote description
+            await pc.setRemoteDescription({ type: 'offer', sdp: offer.sdp });
+            log('Remote description set', 'info');
+        }
+
+        function setupDataChannel() {
+            dataChannel.onopen = () => {
+                log('✅ Data channel opened!', 'success');
+                document.getElementById('channelState').textContent = 'Open';
+                sendMessage({ type: 'auth', identity: identity });
+            };
+
+            dataChannel.onclose = () => {
+                log('Data channel closed', 'warning');
+                document.getElementById('channelState').textContent = 'Closed';
+            };
+
+            dataChannel.onmessage = (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
+                    handleMessage(msg);
+                } catch (err) {
+                    log(`Received: ${event.data}`, 'info');
+                }
+            };
+        }
+
+        function handleMessage(msg) {
+            switch(msg.type) {
+                case 'challenge':
+                    log('Received auth challenge', 'info');
+                    sendMessage({
+                        type: 'response',
+                        identity: identity,
+                        timestamp: Date.now()
+                    });
+                    break;
+
+                case 'authenticated':
+                    log('✅ Authenticated with service!', 'success');
+                    switchTab('entries');
+                    break;
+
+                case 'entry':
+                    displayEntry(msg.entry);
+                    break;
+
+                default:
+                    log(`Unknown message type: ${msg.type}`, 'warning');
+            }
+        }
+
+        function displayEntry(entry) {
+            const container = document.getElementById('entriesContainer');
+            if (container.querySelector('p')) {
+                container.innerHTML = ''; // Clear placeholder
+            }
+
+            const entryDiv = document.createElement('div');
+            entryDiv.style.cssText = 'background: #f7f7f7; padding: 15px; margin-bottom: 10px; border-radius: 8px;';
+            entryDiv.innerHTML = `
+                <strong>${entry.date}</strong>
+                <p style="margin-top: 10px;">${entry.content}</p>
+                <small style="color: #666;">Mood: ${entry.mood} | Weather: ${entry.weather}</small>
+            `;
+            container.appendChild(entryDiv);
+
+            log(`Received diary entry from ${entry.date}`, 'info');
+        }
+
+        function sendMessage(msg) {
+            if (dataChannel && dataChannel.readyState === 'open') {
+                dataChannel.send(JSON.stringify(msg));
+            }
+        }
+
+        async function submitAnswer() {
+            const serviceUrl = document.getElementById('serviceUrl').value.trim();
+            const answerText = document.getElementById('answerText').value;
+
+            try {
+                const response = await fetch(`${serviceUrl}/api/answer`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: answerText
+                });
+
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                log('✅ Answer submitted to service', 'success');
+            } catch (err) {
+                log(`Failed to submit answer: ${err.message}`, 'error');
+            }
+        }
+
+        function copyAnswer() {
+            const answerText = document.getElementById('answerText').value;
+            navigator.clipboard.writeText(answerText);
+            log('Answer copied to clipboard', 'success');
+        }
+
+        async function waitForIceGathering() {
+            return new Promise((resolve) => {
+                if (pc.iceGatheringState === 'complete') {
+                    resolve();
+                } else {
+                    const timeout = setTimeout(() => resolve(), 3000);
+                    pc.onicegatheringstatechange = () => {
+                        if (pc.iceGatheringState === 'complete') {
+                            clearTimeout(timeout);
+                            resolve();
+                        }
+                    };
+                }
+            });
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+            event.target?.classList.add('active');
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+        }
+
+        function updateStatus(state) {
+            const statusEl = document.getElementById('status');
+            const statusText = document.getElementById('statusText');
+
+            statusEl.className = `status ${state}`;
+
+            switch(state) {
+                case 'connected':
+                    statusText.textContent = 'Connected';
+                    break;
+                case 'connecting':
+                    statusText.textContent = 'Connecting...';
+                    break;
+                case 'disconnected':
+                    statusText.textContent = 'Not Connected';
+                    break;
+            }
+        }
+
+        function log(message, type = '') {
+            const logEl = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${timestamp}] ${message}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+    </script>
+</body>
+</html>
