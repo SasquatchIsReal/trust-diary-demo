@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trust Diary Admin - Tom's Control Panel</title>
+    <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl-fast.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tweetnacl-util@0.15.1/nacl-util.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg-primary: #0a0e27;
+            --bg-secondary: #112240;
+            --bg-card: rgba(17, 34, 64, 0.6);
+            --border: rgba(100, 116, 139, 0.2);
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --accent: #3b82f6;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, var(--bg-primary) 0%, #1e293b 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        .admin-container {
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            min-height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            padding: 20px;
+        }
+
+        .sidebar h1 {
+            font-size: 1.5em;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-item {
+            display: block;
+            padding: 12px 16px;
+            margin-bottom: 5px;
+            border-radius: 8px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .nav-item:hover {
+            background: rgba(59, 130, 246, 0.1);
+            color: var(--text-primary);
+        }
+
+        .nav-item.active {
+            background: rgba(59, 130, 246, 0.2);
+            color: var(--accent);
+            border-left: 3px solid var(--accent);
+        }
+
+        /* Main Content */
+        .main-content {
+            padding: 30px;
+            overflow-y: auto;
+        }
+
+        .header {
+            margin-bottom: 30px;
+        }
+
+        .header h2 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: var(--text-secondary);
+        }
+
+        /* Status Bar */
+        .status-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .status-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .status-card h3 {
+            font-size: 0.9em;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status-card .value {
+            font-size: 2em;
+            font-weight: bold;
+        }
+
+        .status-card.connected { border-top: 3px solid var(--success); }
+        .status-card.warning { border-top: 3px solid var(--warning); }
+        .status-card.danger { border-top: 3px solid var(--danger); }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+
+        .card h3 {
+            font-size: 1.3em;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Forms */
+        input, textarea, select {
+            width: 100%;
+            padding: 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            margin-bottom: 15px;
+            font-family: inherit;
+        }
+
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        textarea { resize: vertical; min-height: 100px; }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--text-secondary);
+            font-size: 0.9em;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+            transform: translateY(-1px);
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            text-align: left;
+            padding: 12px;
+            background: var(--bg-primary);
+            color: var(--text-secondary);
+            font-weight: 600;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        td {
+            padding: 12px;
+            border-top: 1px solid var(--border);
+        }
+
+        tr:hover {
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        /* Badge */
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .badge.success { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+        .badge.warning { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+        .badge.danger { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+
+        /* Connection Status */
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            backdrop-filter: blur(10px);
+        }
+
+        .connection-status.connected {
+            background: rgba(16, 185, 129, 0.2);
+            border: 1px solid var(--success);
+            color: var(--success);
+        }
+
+        .connection-status.disconnected {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid var(--danger);
+            color: var(--danger);
+        }
+
+        .pulse {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+
+        /* Tab Content */
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .modal h3 {
+            margin-bottom: 20px;
+        }
+
+        /* Console */
+        .console {
+            background: #000;
+            color: #0f0;
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+            font-size: 0.85em;
+            padding: 15px;
+            border-radius: 8px;
+            height: 200px;
+            overflow-y: auto;
+        }
+
+        .console-entry {
+            margin-bottom: 3px;
+        }
+
+        .console-entry.error { color: #ff6b6b; }
+        .console-entry.success { color: #51cf66; }
+        .console-entry.warning { color: #ffd43b; }
+    </style>
+</head>
+<body>
+    <div class="admin-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <h1>🔐 Trust Diary</h1>
+            <nav>
+                <a class="nav-item active" onclick="switchTab('dashboard')">📊 Dashboard</a>
+                <a class="nav-item" onclick="switchTab('entries')">📝 Entries</a>
+                <a class="nav-item" onclick="switchTab('readers')">👥 Readers</a>
+                <a class="nav-item" onclick="switchTab('connections')">🔌 Connections</a>
+                <a class="nav-item" onclick="switchTab('certificates')">🎫 Certificates</a>
+                <a class="nav-item" onclick="switchTab('settings')">⚙️ Settings</a>
+            </nav>
+
+            <div style="margin-top: auto; padding-top: 30px;">
+                <div style="font-size: 0.85em; color: var(--text-secondary);">
+                    <div>Service: <span id="serviceStatus">Checking...</span></div>
+                    <div style="margin-top: 10px;">Admin: Tom</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Connection Status -->
+            <div class="connection-status disconnected" id="connectionStatus">
+                <div class="pulse"></div>
+                <span id="connectionText">Disconnected</span>
+            </div>
+
+            <!-- Dashboard Tab -->
+            <div id="dashboard-tab" class="tab-content active">
+                <div class="header">
+                    <h2>Dashboard</h2>
+                    <p>Trust Diary admin control panel</p>
+                </div>
+
+                <div class="status-bar">
+                    <div class="status-card connected">
+                        <h3>Service Status</h3>
+                        <div class="value" id="serviceUptime">Online</div>
+                    </div>
+                    <div class="status-card">
+                        <h3>Total Entries</h3>
+                        <div class="value" id="totalEntries">0</div>
+                    </div>
+                    <div class="status-card">
+                        <h3>Active Readers</h3>
+                        <div class="value" id="activeReaders">0</div>
+                    </div>
+                    <div class="status-card warning">
+                        <h3>Pending Approvals</h3>
+                        <div class="value" id="pendingApprovals">0</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>🔑 Admin Authentication</h3>
+                    <div id="authSection">
+                        <p style="margin-bottom: 15px;">Authenticate with your admin private key to access full controls.</p>
+                        <label>Admin Private Key (Base64)</label>
+                        <textarea id="adminPrivateKey" placeholder="Paste your Ed25519 private key..."></textarea>
+                        <button class="btn-primary" onclick="authenticate()">🔓 Authenticate</button>
+                        <button class="btn-secondary" onclick="generateNewKeys()">🔑 Generate New Keypair</button>
+                    </div>
+                    <div id="authenticatedSection" style="display: none;">
+                        <p style="color: var(--success);">✅ Authenticated as administrator</p>
+                        <p style="margin-top: 10px;">Public Key: <code id="adminPubKey" style="font-size: 0.85em;"></code></p>
+                        <button class="btn-danger" onclick="logout()">🔒 Logout</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>📊 Recent Activity</h3>
+                    <div class="console" id="activityLog">
+                        <div class="console-entry">System ready. Awaiting authentication...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Entries Tab -->
+            <div id="entries-tab" class="tab-content">
+                <div class="header">
+                    <h2>Diary Entries</h2>
+                    <p>Manage your trust diary entries</p>
+                </div>
+
+                <div class="card">
+                    <h3>✍️ New Entry</h3>
+                    <label>Title</label>
+                    <input type="text" id="entryTitle" placeholder="Entry title...">
+
+                    <label>Content</label>
+                    <textarea id="entryContent" placeholder="Write your diary entry..."></textarea>
+
+                    <label>Mood</label>
+                    <select id="entryMood">
+                        <option value="">Select mood...</option>
+                        <option value="happy">😊 Happy</option>
+                        <option value="sad">😢 Sad</option>
+                        <option value="excited">🎉 Excited</option>
+                        <option value="anxious">😰 Anxious</option>
+                        <option value="peaceful">😌 Peaceful</option>
+                        <option value="angry">😠 Angry</option>
+                    </select>
+
+                    <button class="btn-primary" onclick="addEntry()">➕ Add Entry</button>
+                </div>
+
+                <div class="card">
+                    <h3>📚 All Entries</h3>
+                    <div id="entriesList">
+                        <p style="color: var(--text-secondary);">No entries yet.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Readers Tab -->
+            <div id="readers-tab" class="tab-content">
+                <div class="header">
+                    <h2>Reader Management</h2>
+                    <p>Control who can read your diary</p>
+                </div>
+
+                <div class="card">
+                    <h3>➕ Add Trusted Reader</h3>
+                    <label>Reader Name</label>
+                    <input type="text" id="readerName" placeholder="e.g., Bob">
+
+                    <label>Reader Public Key (Base64)</label>
+                    <textarea id="readerPublicKey" placeholder="Paste reader's Ed25519 public key..."></textarea>
+
+                    <label>Access Level</label>
+                    <select id="readerAccessLevel">
+                        <option value="read">Read Only</option>
+                        <option value="comment">Read & Comment</option>
+                    </select>
+
+                    <button class="btn-success" onclick="addReader()">✅ Approve Reader</button>
+                </div>
+
+                <div class="card">
+                    <h3>👥 Approved Readers</h3>
+                    <table id="readersTable">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Public Key</th>
+                                <th>Access</th>
+                                <th>Added</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="readersList">
+                            <tr>
+                                <td colspan="6" style="text-align: center; color: var(--text-secondary);">
+                                    No approved readers yet.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Connections Tab -->
+            <div id="connections-tab" class="tab-content">
+                <div class="header">
+                    <h2>Active Connections</h2>
+                    <p>Monitor WebRTC connections</p>
+                </div>
+
+                <div class="card">
+                    <h3>🔌 Connection Stats</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Peer ID</th>
+                                <th>Reader</th>
+                                <th>Connected Since</th>
+                                <th>Data Sent</th>
+                                <th>Data Received</th>
+                                <th>RTT</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="connectionsList">
+                            <tr>
+                                <td colspan="7" style="text-align: center; color: var(--text-secondary);">
+                                    No active connections.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="card">
+                    <h3>📈 WebRTC Metrics</h3>
+                    <div class="console" id="webrtcStats">
+                        <div class="console-entry">Waiting for connections...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Certificates Tab -->
+            <div id="certificates-tab" class="tab-content">
+                <div class="header">
+                    <h2>Certificate Management</h2>
+                    <p>Manage cryptographic certificates and keys</p>
+                </div>
+
+                <div class="card">
+                    <h3>🔐 Server Certificate</h3>
+                    <div style="background: var(--bg-primary); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                        <strong>Public Key:</strong>
+                        <div id="serverPublicKey" style="font-family: monospace; word-break: break-all; margin-top: 10px; color: var(--text-secondary);">
+                            Loading...
+                        </div>
+                    </div>
+                    <button class="btn-secondary" onclick="rotateServerKey()">🔄 Rotate Server Keys</button>
+                    <button class="btn-secondary" onclick="exportServerCert()">📥 Export Certificate</button>
+                </div>
+
+                <div class="card">
+                    <h3>🎫 Reader Certificates</h3>
+                    <div id="certificatesList">
+                        <p style="color: var(--text-secondary);">Loading certificates...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div id="settings-tab" class="tab-content">
+                <div class="header">
+                    <h2>Settings</h2>
+                    <p>Configure trust diary service</p>
+                </div>
+
+                <div class="card">
+                    <h3>🔧 Service Configuration</h3>
+
+                    <label>Service URL</label>
+                    <input type="text" id="serviceUrl" value="http://localhost:3334">
+
+                    <label>Auto-approve readers</label>
+                    <select id="autoApprove">
+                        <option value="false">No - Manual approval required</option>
+                        <option value="true">Yes - Auto-approve with valid signature</option>
+                    </select>
+
+                    <label>Entry Encryption</label>
+                    <select id="entryEncryption">
+                        <option value="true">Enabled - Encrypt all entries</option>
+                        <option value="false">Disabled - Plain text storage</option>
+                    </select>
+
+                    <button class="btn-primary" onclick="saveSettings()">💾 Save Settings</button>
+                </div>
+
+                <div class="card">
+                    <h3>🗑️ Danger Zone</h3>
+                    <p style="margin-bottom: 15px; color: var(--text-secondary);">These actions cannot be undone.</p>
+                    <button class="btn-danger" onclick="clearAllEntries()">Delete All Entries</button>
+                    <button class="btn-danger" onclick="revokeAllReaders()">Revoke All Readers</button>
+                    <button class="btn-danger" onclick="resetService()">Reset Service</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Reader Modal -->
+    <div class="modal" id="addReaderModal">
+        <div class="modal-content">
+            <h3>Confirm Reader Addition</h3>
+            <p>Are you sure you want to add this reader?</p>
+            <div style="margin-top: 20px;">
+                <button class="btn-success" onclick="confirmAddReader()">Yes, Add Reader</button>
+                <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let adminKeys = null;
+        let isAuthenticated = false;
+        let pc = null;
+        let dataChannel = null;
+        let serviceUrl = 'http://localhost:3334';
+        let entries = [];
+        let readers = [];
+        let connections = [];
+
+        // Initialize
+        window.addEventListener('load', () => {
+            loadStoredKeys();
+            checkServiceStatus();
+            updateDashboard();
+        });
+
+        // Authentication
+        function authenticate() {
+            const privateKeyBase64 = document.getElementById('adminPrivateKey').value.trim();
+            if (!privateKeyBase64) {
+                log('Please enter your admin private key', 'error');
+                return;
+            }
+
+            try {
+                const privateKey = nacl.util.decodeBase64(privateKeyBase64);
+                if (privateKey.length !== 64) {
+                    throw new Error('Invalid private key length');
+                }
+
+                const publicKey = privateKey.slice(32);
+
+                adminKeys = {
+                    privateKey: privateKeyBase64,
+                    publicKey: nacl.util.encodeBase64(publicKey)
+                };
+
+                localStorage.setItem('adminKeys', JSON.stringify(adminKeys));
+                isAuthenticated = true;
+
+                document.getElementById('authSection').style.display = 'none';
+                document.getElementById('authenticatedSection').style.display = 'block';
+                document.getElementById('adminPubKey').textContent = adminKeys.publicKey.substring(0, 32) + '...';
+
+                log('✅ Authenticated successfully', 'success');
+                connectToService();
+
+            } catch (err) {
+                log('❌ Authentication failed: ' + err.message, 'error');
+            }
+        }
+
+        function generateNewKeys() {
+            const keyPair = nacl.sign.keyPair();
+            const privateKeyBase64 = nacl.util.encodeBase64(keyPair.secretKey);
+            const publicKeyBase64 = nacl.util.encodeBase64(keyPair.publicKey);
+
+            document.getElementById('adminPrivateKey').value = privateKeyBase64;
+            log('🔑 Generated new keypair. Public key: ' + publicKeyBase64.substring(0, 32) + '...', 'success');
+            log('⚠️ Save your private key securely!', 'warning');
+        }
+
+        function loadStoredKeys() {
+            const stored = localStorage.getItem('adminKeys');
+            if (stored) {
+                adminKeys = JSON.parse(stored);
+                isAuthenticated = true;
+                document.getElementById('authSection').style.display = 'none';
+                document.getElementById('authenticatedSection').style.display = 'block';
+                document.getElementById('adminPubKey').textContent = adminKeys.publicKey.substring(0, 32) + '...';
+                connectToService();
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('adminKeys');
+            adminKeys = null;
+            isAuthenticated = false;
+            document.getElementById('authSection').style.display = 'block';
+            document.getElementById('authenticatedSection').style.display = 'none';
+
+            if (pc) {
+                pc.close();
+                pc = null;
+            }
+
+            updateConnectionStatus('disconnected');
+            log('Logged out', 'info');
+        }
+
+        // Service Connection
+        async function connectToService() {
+            if (!isAuthenticated) {
+                log('Not authenticated', 'error');
+                return;
+            }
+
+            updateConnectionStatus('connecting');
+            log('Connecting to service...', 'info');
+
+            try {
+                // Get WebRTC offer from service
+                const response = await fetch(`${serviceUrl}/api/offer`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+                const offer = await response.json();
+
+                // Create peer connection
+                pc = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                });
+
+                pc.oniceconnectionstatechange = () => {
+                    log(`ICE state: ${pc.iceConnectionState}`, 'info');
+                    if (pc.iceConnectionState === 'connected') {
+                        updateConnectionStatus('connected');
+                    }
+                };
+
+                pc.ondatachannel = (event) => {
+                    dataChannel = event.channel;
+                    setupDataChannel();
+                };
+
+                // Set remote description and create answer
+                await pc.setRemoteDescription({ type: 'offer', sdp: offer.sdp });
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+
+                // Wait for ICE gathering
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+
+                // Submit answer with admin signature
+                const answerData = {
+                    offerId: offer.offerId,
+                    sdp: pc.localDescription.sdp,
+                    adminKey: adminKeys.publicKey
+                };
+
+                const submitResponse = await fetch(`${serviceUrl}/api/answer`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(answerData)
+                });
+
+                if (!submitResponse.ok) throw new Error('Failed to submit answer');
+
+                log('✅ Connected to service', 'success');
+
+            } catch (err) {
+                log(`❌ Connection failed: ${err.message}`, 'error');
+                updateConnectionStatus('disconnected');
+            }
+        }
+
+        function setupDataChannel() {
+            dataChannel.onopen = () => {
+                log('✅ Admin channel established', 'success');
+                sendAdminAuth();
+                requestFullSync();
+            };
+
+            dataChannel.onmessage = (event) => {
+                handleMessage(JSON.parse(event.data));
+            };
+
+            dataChannel.onclose = () => {
+                log('Data channel closed', 'warning');
+                updateConnectionStatus('disconnected');
+            };
+        }
+
+        function sendAdminAuth() {
+            const challenge = Date.now().toString();
+            const signature = nacl.sign.detached(
+                nacl.util.decodeUTF8(challenge),
+                nacl.util.decodeBase64(adminKeys.privateKey)
+            );
+
+            sendMessage({
+                type: 'admin-auth',
+                challenge,
+                signature: nacl.util.encodeBase64(signature),
+                publicKey: adminKeys.publicKey
+            });
+        }
+
+        function handleMessage(msg) {
+            switch(msg.type) {
+                case 'entries':
+                    entries = msg.data || [];
+                    updateEntriesList();
+                    updateDashboard();
+                    break;
+
+                case 'readers':
+                    readers = msg.data || [];
+                    updateReadersList();
+                    updateDashboard();
+                    break;
+
+                case 'connections':
+                    connections = msg.data || [];
+                    updateConnectionsList();
+                    updateDashboard();
+                    break;
+
+                case 'stats':
+                    updateWebRTCStats(msg.data);
+                    break;
+
+                case 'authenticated':
+                    log('✅ Admin authenticated with service', 'success');
+                    break;
+
+                default:
+                    console.log('Unknown message type:', msg.type);
+            }
+        }
+
+        function sendMessage(msg) {
+            if (dataChannel && dataChannel.readyState === 'open') {
+                dataChannel.send(JSON.stringify(msg));
+            }
+        }
+
+        // Entry Management
+        function addEntry() {
+            const title = document.getElementById('entryTitle').value.trim();
+            const content = document.getElementById('entryContent').value.trim();
+            const mood = document.getElementById('entryMood').value;
+
+            if (!title || !content) {
+                log('Please enter title and content', 'error');
+                return;
+            }
+
+            const entry = {
+                id: Date.now().toString(),
+                title,
+                content,
+                mood,
+                timestamp: new Date().toISOString()
+            };
+
+            // Sign the entry
+            const message = JSON.stringify(entry);
+            const signature = nacl.sign.detached(
+                nacl.util.decodeUTF8(message),
+                nacl.util.decodeBase64(adminKeys.privateKey)
+            );
+            entry.signature = nacl.util.encodeBase64(signature);
+
+            sendMessage({
+                type: 'add-entry',
+                entry
+            });
+
+            // Clear form
+            document.getElementById('entryTitle').value = '';
+            document.getElementById('entryContent').value = '';
+            document.getElementById('entryMood').value = '';
+
+            log(`✅ Added entry: "${title}"`, 'success');
+        }
+
+        // Reader Management
+        function addReader() {
+            const name = document.getElementById('readerName').value.trim();
+            const publicKey = document.getElementById('readerPublicKey').value.trim();
+            const accessLevel = document.getElementById('readerAccessLevel').value;
+
+            if (!name || !publicKey) {
+                log('Please enter reader name and public key', 'error');
+                return;
+            }
+
+            sendMessage({
+                type: 'add-reader',
+                reader: {
+                    name,
+                    publicKey,
+                    accessLevel,
+                    addedAt: new Date().toISOString(),
+                    addedBy: adminKeys.publicKey
+                }
+            });
+
+            // Clear form
+            document.getElementById('readerName').value = '';
+            document.getElementById('readerPublicKey').value = '';
+
+            log(`✅ Added reader: ${name}`, 'success');
+        }
+
+        function removeReader(publicKey) {
+            if (confirm('Are you sure you want to remove this reader?')) {
+                sendMessage({
+                    type: 'remove-reader',
+                    publicKey
+                });
+                log('Reader removed', 'success');
+            }
+        }
+
+        // UI Updates
+        function updateDashboard() {
+            document.getElementById('totalEntries').textContent = entries.length;
+            document.getElementById('activeReaders').textContent = connections.length;
+
+            const pending = readers.filter(r => r.status === 'pending').length;
+            document.getElementById('pendingApprovals').textContent = pending;
+        }
+
+        function updateEntriesList() {
+            const container = document.getElementById('entriesList');
+            if (entries.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-secondary);">No entries yet.</p>';
+                return;
+            }
+
+            container.innerHTML = entries.map(entry => `
+                <div style="background: var(--bg-primary); padding: 15px; border-radius: 8px; margin-bottom: 10px;">
+                    <strong>${entry.title}</strong>
+                    <div style="color: var(--text-secondary); font-size: 0.9em; margin: 5px 0;">
+                        ${new Date(entry.timestamp).toLocaleString()}
+                        ${entry.mood ? ` • ${entry.mood}` : ''}
+                    </div>
+                    <div style="margin-top: 10px;">${entry.content}</div>
+                    <button class="btn-danger" style="margin-top: 10px;" onclick="deleteEntry('${entry.id}')">
+                        Delete
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function updateReadersList() {
+            const tbody = document.getElementById('readersList');
+            if (readers.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-secondary);">No approved readers yet.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = readers.map(reader => `
+                <tr>
+                    <td>${reader.name}</td>
+                    <td><code style="font-size: 0.85em;">${reader.publicKey.substring(0, 16)}...</code></td>
+                    <td><span class="badge success">${reader.accessLevel}</span></td>
+                    <td>${new Date(reader.addedAt).toLocaleDateString()}</td>
+                    <td>
+                        ${connections.find(c => c.publicKey === reader.publicKey)
+                            ? '<span class="badge success">Connected</span>'
+                            : '<span class="badge">Offline</span>'}
+                    </td>
+                    <td>
+                        <button class="btn-danger" onclick="removeReader('${reader.publicKey}')">
+                            Revoke
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function updateConnectionsList() {
+            const tbody = document.getElementById('connectionsList');
+            if (connections.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-secondary);">No active connections.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = connections.map(conn => `
+                <tr>
+                    <td><code style="font-size: 0.85em;">${conn.peerId.substring(0, 8)}...</code></td>
+                    <td>${conn.readerName || 'Unknown'}</td>
+                    <td>${new Date(conn.connectedAt).toLocaleTimeString()}</td>
+                    <td>${formatBytes(conn.bytesSent || 0)}</td>
+                    <td>${formatBytes(conn.bytesReceived || 0)}</td>
+                    <td>${conn.rtt || 'N/A'} ms</td>
+                    <td>
+                        <button class="btn-danger" onclick="disconnectPeer('${conn.peerId}')">
+                            Disconnect
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function updateConnectionStatus(status) {
+            const statusEl = document.getElementById('connectionStatus');
+            const textEl = document.getElementById('connectionText');
+
+            statusEl.className = `connection-status ${status}`;
+
+            switch(status) {
+                case 'connected':
+                    textEl.textContent = 'Connected';
+                    document.getElementById('serviceStatus').textContent = 'Online';
+                    break;
+                case 'connecting':
+                    textEl.textContent = 'Connecting...';
+                    document.getElementById('serviceStatus').textContent = 'Connecting...';
+                    break;
+                case 'disconnected':
+                    textEl.textContent = 'Disconnected';
+                    document.getElementById('serviceStatus').textContent = 'Offline';
+                    break;
+            }
+        }
+
+        // Utility functions
+        function switchTab(tabName) {
+            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+            event.target.classList.add('active');
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+        }
+
+        function log(message, type = '') {
+            const logEl = document.getElementById('activityLog');
+            const entry = document.createElement('div');
+            entry.className = `console-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function checkServiceStatus() {
+            fetch(`${serviceUrl}/api/status`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.running) {
+                        document.getElementById('serviceUptime').textContent = 'Online';
+                        document.getElementById('serverPublicKey').textContent = data.publicKey || 'Not available';
+                    }
+                })
+                .catch(err => {
+                    document.getElementById('serviceUptime').textContent = 'Offline';
+                    log('Service not reachable', 'error');
+                });
+        }
+
+        function requestFullSync() {
+            sendMessage({ type: 'request-sync' });
+        }
+
+        function deleteEntry(id) {
+            if (confirm('Delete this entry?')) {
+                sendMessage({ type: 'delete-entry', id });
+                log('Entry deleted', 'success');
+            }
+        }
+
+        function disconnectPeer(peerId) {
+            if (confirm('Disconnect this peer?')) {
+                sendMessage({ type: 'disconnect-peer', peerId });
+            }
+        }
+
+        function saveSettings() {
+            const settings = {
+                serviceUrl: document.getElementById('serviceUrl').value,
+                autoApprove: document.getElementById('autoApprove').value === 'true',
+                entryEncryption: document.getElementById('entryEncryption').value === 'true'
+            };
+
+            localStorage.setItem('adminSettings', JSON.stringify(settings));
+            serviceUrl = settings.serviceUrl;
+
+            sendMessage({ type: 'update-settings', settings });
+            log('Settings saved', 'success');
+        }
+    </script>
+</body>
+</html>
